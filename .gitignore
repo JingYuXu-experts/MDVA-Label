@@ -1,0 +1,38 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# setuptools_scm / setuptools-generate 生成物
+src/mulimgviewer/_version.py
+src/mulimgviewer/_metainfo.py
+
+# 运行产物（out/bench/backends.json 是随仓库分发的实测表，例外保留）
+out/*
+!out/bench/
+out/bench/*
+!out/bench/backends.json
+
+# 本地数据库
+*.sqlite
+*.sqlite3
+*.db
+
+# 前端
+node_modules/
+frontend/dist/
+
+# 本地协作/代理运行时状态，不入仓库
+.qoder/
+.qoder-collab-runtime/
+.qoder-sop-runtime/
+
+# 系统
+Thumbs.db
+.DS_Store

@@ -1,0 +1,11 @@
+{
+  "events": [
+    {
+      "time": 1735689622.56,
+      "label": "SpO2 desaturation episode",
+      "level": 3,
+      "source": "SIM",
+      "duration": 2.88
+    }
+  ]
+}

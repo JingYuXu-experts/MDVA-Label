@@ -1,0 +1,25 @@
+{
+  "SA_Current": {
+    "type": "analog"
+  },
+  "Bus_Voltage": {
+    "type": "analog"
+  },
+  "Batt_Temp": {
+    "type": "analog"
+  },
+  "RW1_Speed": {
+    "type": "analog"
+  },
+  "Dnlink_BER": {
+    "type": "analog"
+  },
+  "Payload_Mode": {
+    "type": "discrete",
+    "values": {
+      "0": "Standby",
+      "1": "Science",
+      "2": "Safe"
+    }
+  }
+}

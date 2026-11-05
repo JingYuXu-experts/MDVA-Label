@@ -1,0 +1,17 @@
+# mdva 引擎运行时依赖（L1 接入 / L2 渲染 / L3 分析 / CLI）——只有硬依赖
+#
+# 这一层刻意不含任何 GUI 包：核心引擎要能在无显示器的服务器上跑批处理。
+# 按需分层的其余清单：
+#   requirements/science.txt  FITS/Parquet/HDF5/CLAHE/IsolationForest 等科研格式与算子
+#   requirements/gui.txt      旧 wxPython 图形界面
+#   requirements/dev.txt      pytest 与 pre-commit
+# 一起装：pip install -r requirements.txt -r requirements/science.txt -r requirements/dev.txt
+#
+# 版本区间的含义：下限是代码实际用到的 API 所需，上限挡住下一个大版本的破坏性变更。
+# 实际验证过的精确版本见 requirements/verified-py310.txt（换版本前先重跑 pytest）。
+# 完整环境与启动说明见 README.md 的"环境与启动"一节。
+
+numpy>=1.24,<3
+scipy>=1.10,<2
+pandas>=2.0,<3
+Pillow>=10.1,<13

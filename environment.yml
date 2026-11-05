@@ -1,0 +1,24 @@
+# 核心引擎环境（L1 接入 / L2 渲染 / L3 分析 / CLI）——答辩演示与跑批处理用这个
+#
+# 在仓库根目录执行（下面的 -r 路径是相对当前目录解析的）：
+#   conda env create -f environment.yml
+#   conda activate mdva
+#   PYTHONPATH=src python -m pytest tests -q        # Windows PowerShell: $env:PYTHONPATH="src"
+#
+# 旧 wxPython 图形界面不在本环境里，需要时叠加：
+#   pip install -r requirements/gui.txt
+#
+# conda 只负责 Python 解释器，其余一律走 pip：混用 conda 和 pip 装同一个
+# 带 C 扩展的包会出现两份安装互相遮蔽，出问题极难定位。
+# 已验证过的精确版本见 requirements/verified-py310.txt。
+name: mdva
+channels:
+  - conda-forge
+
+dependencies:
+  - python=3.10
+  - pip
+  - pip:
+      - -r requirements.txt
+      - -r requirements/science.txt
+      - -r requirements/dev.txt

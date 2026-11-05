@@ -1,0 +1,28 @@
+# 生成物，别手改：python -m pip freeze 里筛出项目实际导入的包
+# 环境：conda env `mdva`  Python 3.10.20  (E:\ANACONDA\envs\mdva\python.exe)
+# 生成时间：2026-10-20  当时 294 项测试全绿
+#
+# 这份是"验证过的精确版本"，requirements*.txt 里的区间才是意图声明。
+# 复现论文实验用这份；升级请先改区间再重跑 pytest。
+
+numpy==2.2.6
+scipy==1.15.3
+pandas==2.3.3
+pillow==12.3.0
+astropy==6.1.7
+scikit-image==0.25.2
+scikit-learn==1.7.2
+h5py==3.16.0
+pyarrow==25.0.1
+imageio==2.38.0
+imageio-ffmpeg==0.6.0
+tifffile==2025.5.10
+pyyaml==6.0.3
+requests==2.33.1
+pytest==9.1.1
+
+# 以下包在 mdva 环境里未安装（属于 requirements/gui.txt，只有跑旧界面才需要）：
+#   wxpython
+#   piexif
+#   reportlab
+#   ffmpeg-python

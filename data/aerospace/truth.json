@@ -1,0 +1,26 @@
+{
+  "injected_anomalies": {
+    "Batt_Temp": [
+      "drift"
+    ],
+    "RW1_Speed": [
+      "frozen"
+    ],
+    "Bus_Voltage": [
+      "spike"
+    ],
+    "Dnlink_BER": [
+      "degrade"
+    ]
+  },
+  "xray_sources": 60,
+  "xray_cosmics": 40,
+  "solar_flares": 4,
+  "n_frames": 16,
+  "t0": 1735689600.0,
+  "n_telemetry": 20000,
+  "linkage_window": [
+    1735695990.0,
+    1735696032.0
+  ]
+}

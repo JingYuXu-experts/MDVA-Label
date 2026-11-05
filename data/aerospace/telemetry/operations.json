@@ -1,0 +1,32 @@
+{
+  "events": [
+    {
+      "time": 1735696000.0,
+      "label": "加热器控制指令下发",
+      "level": 1,
+      "source": "SIM",
+      "duration": 0
+    },
+    {
+      "time": 1735700600.0,
+      "label": "动量轮 A 组切换",
+      "level": 2,
+      "source": "SIM",
+      "duration": 0
+    },
+    {
+      "time": 1735704000.0,
+      "label": "数传链路重配置",
+      "level": 2,
+      "source": "SIM",
+      "duration": 0
+    },
+    {
+      "time": 1735706600.0,
+      "label": "载荷进入安全模式",
+      "level": 3,
+      "source": "SIM",
+      "duration": 600
+    }
+  ]
+}

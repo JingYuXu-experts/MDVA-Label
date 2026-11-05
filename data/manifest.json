@@ -1,0 +1,121 @@
+{
+  "generated_by": "mdva.datasets",
+  "seed": 7,
+  "categories": {
+    "aerospace": {
+      "title": "航空航天 / 空间科学数据",
+      "modalities": [
+        "series",
+        "event",
+        "image",
+        "cube",
+        "video"
+      ],
+      "stress": "高动态位深、跨模态时间联动、离散量语义",
+      "root": "data\\aerospace",
+      "truth": {
+        "injected_anomalies": {
+          "Batt_Temp": [
+            "drift"
+          ],
+          "RW1_Speed": [
+            "frozen"
+          ],
+          "Bus_Voltage": [
+            "spike"
+          ],
+          "Dnlink_BER": [
+            "degrade"
+          ]
+        },
+        "xray_sources": 60,
+        "xray_cosmics": 40,
+        "solar_flares": 4,
+        "n_frames": 16,
+        "t0": 1735689600.0,
+        "n_telemetry": 20000,
+        "linkage_window": [
+          1735695990.0,
+          1735696032.0
+        ]
+      }
+    },
+    "medical": {
+      "title": "医学影像与生理信号",
+      "modalities": [
+        "video",
+        "series",
+        "event",
+        "image"
+      ],
+      "stress": "窗宽窗位、彩色帧、长时序尖峰保留",
+      "root": "data\\medical",
+      "truth": {
+        "ct": {
+          "hu_intercept": -1024,
+          "tumor": [
+            91.12198642714812,
+            83.50267306493068,
+            10.878428451225968
+          ],
+          "n_slices": 48
+        },
+        "n_pathology": 6,
+        "desaturation_event": "SpO2 desaturation episode",
+        "pathology_labels": {
+          "0": "背景",
+          "1": "腺体腔",
+          "2": "核",
+          "colors": [
+            [
+              0,
+              0,
+              0
+            ],
+            [
+              245,
+              235,
+              240
+            ],
+            [
+              95,
+              60,
+              140
+            ]
+          ]
+        }
+      }
+    },
+    "cv_segmentation": {
+      "title": "计算机视觉图像分割",
+      "modalities": [
+        "image"
+      ],
+      "stress": "多模型输出跨目录并行对比、批量算子、标注导出",
+      "root": "data\\cv_segmentation",
+      "truth": {
+        "per_model": {
+          "unet": {
+            "mean_miou": 0.7057,
+            "mean_iou_blob": 0.8243,
+            "mean_iou_stripe": 0.6555,
+            "mean_iou_ring": 0.6372
+          },
+          "deeplabv3": {
+            "mean_miou": 0.9923,
+            "mean_iou_blob": 0.9999,
+            "mean_iou_stripe": 0.9876,
+            "mean_iou_ring": 0.9893
+          },
+          "segformer_s": {
+            "mean_miou": 0.5803,
+            "mean_iou_blob": 0.7504,
+            "mean_iou_stripe": 0.0,
+            "mean_iou_ring": 0.9906
+          }
+        },
+        "n_scenes": 12
+      }
+    }
+  }
+}

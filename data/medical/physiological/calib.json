@@ -1,0 +1,17 @@
+{
+  "ECG_II": {
+    "type": "analog"
+  },
+  "ECG_V5": {
+    "type": "analog"
+  },
+  "ECG_aVF": {
+    "type": "analog"
+  },
+  "SpO2": {
+    "type": "analog"
+  },
+  "Resp": {
+    "type": "analog"
+  }
+}

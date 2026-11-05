@@ -1,0 +1,27 @@
+# 科研数据格式与算子依赖（按需）
+#
+# 核心引擎不装这些也能跑，缺了只是对应能力不可用，每一项在代码里都给了
+# 明确的降级或报错路径，不会静默出错。本文件是纯包名清单，不含 -r，
+# 这样 pyproject 的动态依赖解析才不会报错；一起装用：
+#   pip install -r requirements.txt -r requirements/science.txt
+#
+#   astropy        FITS 读写 + zscale 区间估计与 asinh 拉伸
+#                  （缺失时 FITS 打不开，这两种区间/拉伸报错，其余 4 种区间估计仍可用）
+#   scikit-image   CLAHE 对比度拉伸（缺失时自动降级为全局直方图均衡）
+#   scikit-learn   iforest 异常检测算子（缺失时该算子注册失败，其余 8 个不受影响）
+#   h5py           .h5 / .hdf5 时序表
+#   pyarrow        pandas 读 .parquet 的后端
+#   PyYAML         读 YAML 格式的流水线配置（缺了只能用 JSON 配置）
+#   imageio        多页科学 TIFF 与容器视频文件的解码
+#   imageio-ffmpeg 容器视频需要的 ffmpeg 后端（自带静态二进制，无需系统 FFmpeg）
+#   tifffile       16/32 位 TIFF 的可靠读取（imageio 的后端之一）
+
+astropy>=6.0,<7
+scikit-image>=0.21,<1
+scikit-learn>=1.3,<2
+h5py>=3.9,<4
+pyarrow>=14,<26
+PyYAML>=6,<7
+imageio>=2.31,<3
+imageio-ffmpeg>=0.4,<1
+tifffile>=2023.7

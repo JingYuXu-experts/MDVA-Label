@@ -1,0 +1,35 @@
+{
+  "ct": {
+    "hu_intercept": -1024,
+    "tumor": [
+      91.12198642714812,
+      83.50267306493068,
+      10.878428451225968
+    ],
+    "n_slices": 48
+  },
+  "n_pathology": 6,
+  "desaturation_event": "SpO2 desaturation episode",
+  "pathology_labels": {
+    "0": "背景",
+    "1": "腺体腔",
+    "2": "核",
+    "colors": [
+      [
+        0,
+        0,
+        0
+      ],
+      [
+        245,
+        235,
+        240
+      ],
+      [
+        95,
+        60,
+        140
+      ]
+    ]
+  }
+}

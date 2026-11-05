@@ -1,0 +1,22 @@
+# Web 层依赖：零新增包
+#
+# `mdva serve` 用的是标准库 http.server.ThreadingHTTPServer，接口路由与前端静态托管
+# 都不需要额外安装任何东西。装完引擎（requirements.txt + requirements/science.txt）
+# 就能直接：
+#
+#   python -m mdva serve --data data
+#   浏览器打开 http://127.0.0.1:8765/
+#
+# 这一层刻意不依赖 FastAPI/uvicorn：
+#   1. 用户的 conda 环境由他自己决定，多一个包就多一次装不上的风险；
+#   2. 全部能力都在 web/services.py 的门面函数里，路由表在 web/routes.py，
+#      标准库适配器只是把它们接到 socket 上——真要换 ASGI 只改 web/server.py；
+#   3. 断网自检（tests/mdva/test_offline.py）要求进程不发起任何出站请求，
+#      少一个依赖就少一处可能连外网的地方。
+#
+# 想改用 ASGI 栈的话再自行安装（本项目不测试这条路径，装了也不会被 mdva serve 使用）：
+#   pip install "fastapi>=0.110,<1" "uvicorn>=0.27,<1"
+#
+# 前端（frontend/，Vite + Vue 3 + TS + Pinia）用的是 Node，不走 pip：
+#   cd frontend && npm install && npm run build
+# 构建产物落到 src/mdva/web/static/，由上面那个服务托管。

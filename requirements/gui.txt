@@ -1,0 +1,17 @@
+# 旧 wxPython 界面（src/mulimgviewer）的依赖
+#
+# 引擎本身不需要这一层，只有要跑那个图形界面时才装：
+#   pip install -r requirements.txt -r requirements/gui.txt
+#
+# 注意 src/mulimgviewer/src/main.py 第 4 行是模块级 `import ffmpeg`，
+# 所以 ffmpeg-python 是界面的硬依赖。它只是 Python 侧的封装，真正转码
+# 还要系统里有 ffmpeg 可执行文件：conda install -c conda-forge ffmpeg。
+# mdva 引擎不走这条路——它的视频解码用 imageio-ffmpeg 自带的静态二进制。
+#
+# requests 只用在"检查更新"里，是函数级导入，可以不装。
+
+wxPython>=4.2,<5
+piexif>=1.1.3,<2
+reportlab>=4.0,<5
+imageio>=2.31,<3
+ffmpeg-python>=0.2,<1

@@ -1,0 +1,50 @@
+{
+  "n_scenes": 12,
+  "models": [
+    "unet",
+    "deeplabv3",
+    "segformer_s"
+  ],
+  "classes": {
+    "1": "blob",
+    "2": "stripe",
+    "3": "ring"
+  },
+  "label_palette": {
+    "1": [
+      219,
+      77,
+      64
+    ],
+    "2": [
+      51,
+      184,
+      89
+    ],
+    "3": [
+      64,
+      102,
+      224
+    ]
+  },
+  "per_model": {
+    "unet": {
+      "mean_miou": 0.7057,
+      "mean_iou_blob": 0.8243,
+      "mean_iou_stripe": 0.6555,
+      "mean_iou_ring": 0.6372
+    },
+    "deeplabv3": {
+      "mean_miou": 0.9923,
+      "mean_iou_blob": 0.9999,
+      "mean_iou_stripe": 0.9876,
+      "mean_iou_ring": 0.9893
+    },
+    "segformer_s": {
+      "mean_miou": 0.5803,
+      "mean_iou_blob": 0.7504,
+      "mean_iou_stripe": 0.0,
+      "mean_iou_ring": 0.9906
+    }
+  }
+}

@@ -1,0 +1,10 @@
+# 开发/测试依赖
+#
+# 完整开发环境（引擎 + 科研格式 + 测试）一次装齐：
+#   pip install -r requirements.txt -r requirements/science.txt -r requirements/dev.txt
+#
+# 测试会走 FITS / 时序 / 视频的真实加载路径，所以 science.txt 也要装：
+# tests 里对 astropy 用了 importorskip，不装就等于整块测试被静默跳过。
+
+pytest>=7.4,<10
+pre-commit
