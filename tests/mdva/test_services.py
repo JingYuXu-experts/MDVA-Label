@@ -12,6 +12,7 @@ import pytest
 from PIL import Image
 
 from mdva import io, synth
+from mdva.annotate.model import Ann
 from mdva.web.services import Hub, png_b64, slice_of, style_of
 
 
@@ -496,6 +497,59 @@ def test_operators_describe_every_layer(hub_ws):
     assert {"name", "schema"} <= set(ops[0]) and presets[0]["reason"]
     with pytest.raises(ValueError):
         hub.operators("nope")
+
+
+# ---------------------------------------------------------------- REQ-W15/W16
+
+def test_put_annotations_rejects_pixel_geometry_outside_native_bounds(hub_ws):
+    """REQ-W15：外部把渲染尺寸当 native 写进来的越界框，必须在写入当场 400。
+    以前放行会留下"同一份坏输入两种结局"：COCO 回读报红、YOLO/VOC clamp 却
+    裁成看起来合法。校验先于删除——非法批次不许把旧标注清掉只留个空版本。"""
+    hub, data, root, did, vid = hub_ws
+    uri = str(data / "image_field.fits")
+    nh, nw = (int(v) for v in io.load_any(uri).shape[-2:])
+    ok = Ann("box", [1, 1, nw - 2, nh - 2], "耀斑区")
+    hub.put_annotations(vid, uri, [ok.to_json()])
+    assert len(hub.annotations(vid, uri)) == 1
+
+    bad = Ann("box", [0, 0, nw + 40, 10], "越界框")
+    with pytest.raises(ValueError) as exc:
+        hub.put_annotations(vid, uri, [bad.to_json()])     # replace=True 的整批提交
+    assert "native" in str(exc.value) or "原生尺寸" in str(exc.value)
+    assert len(hub.annotations(vid, uri)) == 1             # 被拒的写入没把旧的清掉
+
+    far = Ann("poly", [nw - 10, nh - 10, nw + 50, nh - 10, nw - 10, nh + 30], "越界轮廓")
+    with pytest.raises(ValueError):
+        hub.put_annotations(vid, uri, [far.to_json()])
+    with pytest.raises(ValueError):
+        hub.put_annotations(vid, uri, [Ann("point", [nw + 5, 0], "越界点").to_json()])
+
+
+def test_frame_meta_reports_native_size_next_to_render_size(hub_ws):
+    """REQ-W15 接口面：meta 同时给渲染尺寸与 native 宽高，外部导入有了唯一换算依据。"""
+    hub, data, root, did, vid = hub_ws
+    uri = str(data / "image_field.fits")
+    png, meta = hub.frame_png(uri, {"width": 320, "height": 200})
+    nh, nw = (int(v) for v in io.load_any(uri).shape[-2:])
+    assert (meta["width"], meta["height"]) == (320, 200)
+    assert (meta["native_width"], meta["native_height"]) == (nw, nh)
+    _, m_series = hub.frame_png(str(data / "telemetry_sim.csv"), {"width": 320, "height": 200})
+    assert m_series["native_width"] is None and m_series["native_height"] is None
+
+
+def test_task_table_and_export_history_use_relative_out_dir(hub_ws):
+    """REQ-W16：同一 out_dir 在导出响应里是相对、在任务表/导出历史里曾是绝对原文。
+    网页出口全部统一 D3 §9 口径（相对工作区根），库里保持绝对。"""
+    hub, data, root, did, vid = hub_ws
+    resp = hub.export(vid, "coco")
+    rel = resp["out_dir"]
+    assert not Path(rel).is_absolute()
+
+    row = [t for t in hub.tasks(kind="export") if t["version_in"] == vid][-1]
+    assert row["report"]["out_dir"] == rel
+    hist = hub.export_report(vid)
+    assert hist and hist[-1]["report"]["out_dir"] == rel
+    json.dumps({"tasks": hub.tasks(), "hist": hist}, allow_nan=False)   # 出口 JSON 安全
 
 
 # ---------------------------------------------------------------------- 导出

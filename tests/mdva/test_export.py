@@ -160,6 +160,26 @@ def test_yolo_data_yaml_matches_categories(env, tmp_path):
     assert (d / "images" / "train").is_dir()
 
 
+def test_yolo_export_without_any_spatial_sample_still_writes_data_yaml(env, tmp_path):
+    """M4-C 报的缺陷：零空间标注的版本导 yolo 直接 FileNotFoundError——
+    data.yaml 在样本循环的 mkdir 之前落笔，空集合时目录根本不存在。
+    空集合是合法状态，必须照样产出自描述目录（data.yaml + dataset_report.json）。"""
+    s = env.store
+    troot = env.tmp / "telemetry_only"
+    troot.mkdir()
+    did2 = s.create_dataset("纯遥测线", "series_interval", troot)
+    vid2 = s.put_version(did2, None, "init")
+    s.put_annotation(vid2, str(env.series),
+                     Ann("interval", [env.t0 + 600, env.t0 + 780], "过温"))
+
+    d = tmp_path / "yolo_empty"
+    report = EXP.export(s, vid2, "yolo", str(d))
+    assert (d / "data.yaml").is_file() and (d / "dataset_report.json").is_file()
+    assert report["n_images"] == 0 and report["n_annotations"] == 0
+    text = (d / "data.yaml").read_text(encoding="utf-8")
+    assert "train: images/train" in text              # 目录结构照声明，训练端拿到的是空集不是崩
+
+
 def test_only_labels_narrows_both_objects_and_class_list(env, tmp_path):
     d = tmp_path / "blob_only"
     report = EXP.export(env.store, env.version, "yolo", str(d), only_labels=["blob"])

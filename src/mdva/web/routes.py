@@ -731,9 +731,7 @@ def _collect_latest(cx: Ctx):
 
 @route("GET", "/tasks", "后台任务列表（清洗/增强/导出都留痕）")
 def _tasks(cx: Ctx):
-    kind = cx.p.text("kind")
-    ds = cx.p.text("dataset")
-    rows = cx.hub.store.list_tasks(ds or None, kind or None)
+    rows = cx.hub.tasks(kind=cx.p.text("kind"), dataset_id=cx.p.text("dataset"))
     return {"tasks": rows, "n": len(rows)}
 
 

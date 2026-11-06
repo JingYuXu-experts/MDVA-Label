@@ -27,7 +27,7 @@ import numpy as np
 from ..annotate import state as ST
 from ..annotate.model import Ann
 from ..annotate.store import DATASET_TYPES, Store
-from ..core.model import Slice
+from ..core.model import Modality, Slice
 from .. import io as MDIO
 from .. import render as RD
 
@@ -427,9 +427,18 @@ class Hub:
         cursor = params.get("cursor")
         result = RD.render_item(item, size=size, window=sl, style=style,
                                cursor_t=float(cursor) if cursor not in (None, "") else None)
+        # REQ-W15：标注坐标系是 native 像素，而 width/height 是渲染尺寸——外部导入
+        # 只信 meta 时拿渲染尺寸当 native 就会写出越界框。这里把原生宽高一并报出，
+        # 换算与校验都有唯一依据，不用猜。
+        native_w = native_h = None
+        shape = tuple(item.shape or ())
+        if (item.modality in (Modality.IMAGE.value, Modality.CUBE.value, Modality.VIDEO.value)
+                and len(shape) >= 2):
+            native_h, native_w = int(shape[-2]), int(shape[-1])
         body = {
             "uri": str(uri), "modality": item.modality, "png": png_b64(result.rgb),
             "width": size[0], "height": size[1],
+            "native_width": native_w, "native_height": native_h,
             "title": result.title, "subtitle": result.subtitle,
             "info": _plain(result.info or {}),
             "index": sl.index, "t0": None if not np.isfinite(sl.t0) else sl.t0,
@@ -629,6 +638,14 @@ class Hub:
         """
         ids = []
         removed = 0
+        prepared = []
+        for payload in anns or []:
+            ann = payload["ann"] if isinstance(payload, dict) and "ann" in payload else payload
+            prepared.append(ann if isinstance(ann, Ann) else Ann.from_json(ann))
+        # REQ-W15：像素几何一律按条目 native 尺寸当场拒绝。越界框在下游是
+        # "同一份坏输入两种结局"：COCO 回读会报，YOLO/VOC 的 clamp 却把它裁成
+        # 看起来合法——静默归等于把数据损坏伪装成成功。写入点拦截是唯一收口。
+        self._check_pixel_bounds(uri, prepared)
         if replace:
             for row in self.store.list_annotations(version_id, uri):
                 if row["state"] in ("approved",):
@@ -636,12 +653,50 @@ class Hub:
                         f"{uri} 有已通过的标注（{row['id']}），不许被整条替换；先驳回再改")
                 self.store.delete_annotation(row["id"], role or "admin", "replace")
                 removed += 1
-        for payload in anns or []:
-            ann = payload["ann"] if isinstance(payload, dict) and "ann" in payload else payload
-            ann = ann if isinstance(ann, Ann) else Ann.from_json(ann)
+        for ann in prepared:
             ids.append(self.store.put_annotation(version_id, uri, ann, role=role, state=state))
         return {"version_id": version_id, "uri": uri, "ids": ids, "removed": removed,
                 "n": len(ids)}
+
+    _PIXEL_GEOMS = ("box", "poly", "point")
+    _BOUNDS_EPS = 1e-6          # 画布整像素映射的浮点噪声不该被当成越界
+
+    def _check_pixel_bounds(self, uri, anns) -> None:
+        cand = [a for a in anns if a.geom in self._PIXEL_GEOMS]
+        if not cand:
+            return
+        item = self.load_item(uri)
+        if item.modality not in (Modality.IMAGE.value, Modality.CUBE.value, Modality.VIDEO.value):
+            return                       # 时序/事件条目没有像素空间
+        shape = tuple(item.shape or ())
+        if len(shape) < 2:
+            return
+        nh, nw = int(shape[-2]), int(shape[-1])
+        for a in cand:
+            bad = self._pixel_violation(a, nw, nh)
+            if bad:
+                raise ValueError(
+                    f"{uri} 的原生尺寸是 {nw}x{nh}，标注越界：{bad}。"
+                    f"标注坐标系是 native 像素；/api/frame/meta 的 width/height 是渲染尺寸，"
+                    f"换算请用 native_width/native_height")
+
+    @staticmethod
+    def _pixel_violation(ann, nw: int, nh: int) -> str:
+        c = [float(v) for v in ann.coords]
+        eps = Hub._BOUNDS_EPS
+        if ann.geom == "box":
+            x, y, w, h = c[:4]
+            if x < -eps or y < -eps or x + w > nw + eps or y + h > nh + eps:
+                return f"box [{c[0]:g}, {c[1]:g}, {c[2]:g}, {c[3]:g}] 超出 {nw}x{nh}"
+        elif ann.geom == "point":
+            if not (-eps <= c[0] <= nw - 1 + eps and -eps <= c[1] <= nh - 1 + eps):
+                return f"point [{c[0]:g}, {c[1]:g}] 不在 {nw}x{nh} 内"
+        else:                                   # poly
+            xs, ys = c[0::2], c[1::2]
+            if (min(xs) < -eps or min(ys) < -eps
+                    or max(xs) > nw + eps or max(ys) > nh + eps):
+                return f"poly 顶点范围 x[{min(xs):g},{max(xs):g}] y[{min(ys):g},{max(ys):g}] 超出 {nw}x{nh}"
+        return ""
 
     def set_state(self, annotation_id: str, role: str, action: str, reason: str = "") -> dict:
         to = self.store.set_state(annotation_id, role, action, reason)
@@ -763,9 +818,14 @@ class Hub:
                           "budget": budget,
                           "advice": stop_advice(self.round_history(version_id))})
 
+    def tasks(self, kind: str = "", dataset_id: str = "") -> list:
+        """任务表网页出口：库内 report 按 D3 §9 存绝对（引擎空间），这里统一
+        相对化到工作区根——与导出响应里的 out_dir 同一基准，前端只信一种形态。"""
+        return self._rel(self.store.list_tasks(dataset_id or None, kind or None))
+
     def round_history(self, version_id: str) -> list:
-        return [t["report"] for t in self.store.list_tasks(kind="active")
-                if t["version_in"] == version_id]
+        return self._rel([t["report"] for t in self.store.list_tasks(kind="active")
+                          if t["version_in"] == version_id])
 
     def active_run(self, version_id: str, uris: Sequence, params: dict) -> dict:
         """跑多轮主动学习曲线（用真值当模拟标注员，给论文 E3 出数）。
@@ -894,7 +954,8 @@ class Hub:
                 "check": self._rel(_plain(check))}
 
     def export_report(self, version_id: str) -> list:
-        return [t for t in self.store.list_tasks(kind="export") if t["version_in"] == version_id]
+        return self._rel([t for t in self.store.list_tasks(kind="export")
+                          if t["version_in"] == version_id])
 
     # ------------------------------------------------------------------ 收录（文件搬运）
 

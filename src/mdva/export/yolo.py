@@ -85,6 +85,9 @@ def export_yolo(store, version_id, out_dir, task="detect", split_ratios="0.7/0.1
             background[fold] += 1
 
     yaml_path = out / "data.yaml"
+    # 零空间样本（纯时序版本）时循环里的 mkdir 一次都不会执行，data.yaml 必须先
+    # 确保目录存在——空集合是合法状态，训练端拿到的应当是空数据集而不是一场崩溃。
+    out.mkdir(parents=True, exist_ok=True)
     yaml_path.write_text(_yaml({
         "path": str(out.resolve()).replace("\\", "/"),
         "train": "images/train", "val": "images/val", "test": "images/test",
