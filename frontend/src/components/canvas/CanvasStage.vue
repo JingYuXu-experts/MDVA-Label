@@ -118,8 +118,34 @@ function geomAllowed(g: Geom): boolean {
   return true
 }
 
+// 手势期把 move/up 绑到 window：指针离开画布、或任何被打断的拖拽会话都不会让 mouseup 丢失
+// （BUG-011 的 is-drag 残留属同一类：mouseup 没派发，onUp 就不会跑）
+let gestureBound = false
+function bindGesture(): void {
+  if (gestureBound) return
+  window.addEventListener('mousemove', onMove)
+  window.addEventListener('mouseup', onUp)
+  gestureBound = true
+}
+function unbindGesture(): void {
+  if (!gestureBound) return
+  window.removeEventListener('mousemove', onMove)
+  window.removeEventListener('mouseup', onUp)
+  gestureBound = false
+}
+/** 手势作废：清拖拽/草稿态并解绑，保证 is-drag、读数不残留 */
+function resetGesture(): void {
+  dragLocalId.value = null; dragHandle = -1; draft.value = null
+  readout.value = ''
+  unbindGesture()
+}
+
 function onDown(evt: MouseEvent): void {
   if (!store.currentUri) return
+  // BUG-011：Blink 在 mousedown 后越过拖拽阈值会对 SVG 内容起原生拖拽，dragstart 之后
+  // 页面再也收不到 mousemove/mouseup（顶点只跟第一段、is-drag 卡住）。mousedown 一律
+  // preventDefault 让拖拽会话根本起不来，手势期的 move/up 再绑到 window 保证必达。
+  evt.preventDefault()
   const cn = toCanvas(evt)
   const p = toNative(evt)
   if (store.mode === 'select') {
@@ -131,6 +157,7 @@ function onDown(evt: MouseEvent): void {
       if (!a || a.state === 'approved') return
       dragLocalId.value = id; dragHandle = Number(handle.getAttribute('data-handle'))
       dragStart = p; dragStartCn = cn; dragOrig = [...a.coords]
+      bindGesture()
       return
     }
     if (g) {
@@ -140,6 +167,7 @@ function onDown(evt: MouseEvent): void {
       const a = store.draftAnns.find((x) => x.localId === id)
       if (a && a.state !== 'approved') {
         dragLocalId.value = id; dragHandle = -1; dragStart = p; dragStartCn = cn; dragOrig = [...a.coords]
+        bindGesture()
       }
       return
     }
@@ -157,14 +185,14 @@ function onDown(evt: MouseEvent): void {
     polyBuf.value.push(p)
     return
   }
-  if (store.mode === 'box') { draft.value = { kind: 'box', x1: p.x, y1: p.y, x2: p.x, y2: p.y }; return }
+  if (store.mode === 'box') { draft.value = { kind: 'box', x1: p.x, y1: p.y, x2: p.x, y2: p.y }; bindGesture(); return }
   if (store.mode === 'interval') {
     if (!geomAllowed('interval')) { toast.warning('时段仅时序态可用（Ann 模型约束）'); return }
-    draft.value = { kind: 'interval', a: xToTime(cn.x), b: xToTime(cn.x) }; return
+    draft.value = { kind: 'interval', a: xToTime(cn.x), b: xToTime(cn.x) }; bindGesture(); return
   }
   if (store.mode === 'level') {
     if (!geomAllowed('level')) { toast.warning('水平带仅时序态可用（Ann 模型约束）'); return }
-    draft.value = { kind: 'level', a: xToTime(cn.x), b: xToTime(cn.x) }; return
+    draft.value = { kind: 'level', a: xToTime(cn.x), b: xToTime(cn.x) }; bindGesture(); return
   }
 }
 
@@ -211,10 +239,14 @@ function onMove(evt: MouseEvent): void {
     readout.value = readText(a, p)
     return
   }
-  if (store.mode === 'select') {
-    const g = (evt.target as Element).closest('g.ann')
-    if (svgEl.value) svgEl.value.style.cursor = g ? 'move' : 'default'
-  }
+}
+
+/** 悬停光标（非手势期，绑在 svg 上） */
+function onHover(evt: MouseEvent): void {
+  if (dragLocalId.value != null || draft.value) return
+  if (store.mode !== 'select' || !svgEl.value) return
+  const g = (evt.target as Element).closest('g.ann')
+  svgEl.value.style.cursor = g ? 'move' : 'default'
 }
 
 /** 拖拽中的实时坐标读数（native 图像像素，mono + tabular-nums） */
@@ -261,6 +293,7 @@ function onUp(): void {
   }
   dragLocalId.value = null; dragHandle = -1
   readout.value = ''
+  unbindGesture()
 }
 
 function closePoly(): void {
@@ -333,14 +366,14 @@ const polyPoints = (c: number[]): string => {
   return out.join(' ')
 }
 
-watch(() => store.mode, (m) => { if (m !== 'select') leaveVertexSession(true) })
-watch(() => store.currentUri, () => { vertexEditId.value = null; dragLocalId.value = null })
+watch(() => store.mode, (m) => { if (m !== 'select') leaveVertexSession(true); resetGesture() })
+watch(() => store.currentUri, () => { vertexEditId.value = null; dragLocalId.value = null; resetGesture() })
 
-onBeforeUnmount(() => { if (throttleTimer) clearTimeout(throttleTimer) })
+onBeforeUnmount(() => { if (throttleTimer) clearTimeout(throttleTimer); unbindGesture() })
 </script>
 
 <template>
-  <div class="stage-wrap">
+  <div class="stage-wrap" @dragstart.prevent>
     <div v-if="store.loadingFrame" class="stage-spinner" role="status" aria-label="帧加载中"><span /></div>
     <div class="stage" :style="stageStyle">
       <img
@@ -351,6 +384,7 @@ onBeforeUnmount(() => { if (throttleTimer) clearTimeout(throttleTimer) })
         :width="store.frameW"
         :height="store.frameH"
         alt="数据帧"
+        draggable="false"
         @load="onImgLoad"
         @error="onImgError"
       />
@@ -364,8 +398,7 @@ onBeforeUnmount(() => { if (throttleTimer) clearTimeout(throttleTimer) })
         :width="store.frameW"
         :height="store.frameH"
         @mousedown="onDown"
-        @mousemove="onMove"
-        @mouseup="onUp"
+        @mousemove="onHover"
         @dblclick="onDbl"
       >
         <!-- 已存标注：几何经 fit 正映射，coords 原值即 Ann 存储值（native 图像像素） -->
@@ -446,11 +479,13 @@ onBeforeUnmount(() => { if (throttleTimer) clearTimeout(throttleTimer) })
 </template>
 
 <style scoped>
-.stage-wrap { position: relative; flex: 1; min-height: 0; overflow: auto; background: #0d0f12; }
-.stage { position: relative; margin: auto; }
-.stage__frame { display: block; image-rendering: auto; }
+.stage-wrap { position: relative; flex: 1; min-height: 0; overflow: auto; background: #0d0f12; user-select: none; }
+/* BUG-011：帧图是 <img>（Blink 默认可原生拖拽）、叠加层是 SVG 内容——样式层一并禁掉，
+   与 mousedown/dragstart 的 preventDefault 组成双保险 */
+.stage { position: relative; margin: auto; -webkit-user-drag: none; user-select: none; }
+.stage__frame { display: block; image-rendering: auto; -webkit-user-drag: none; user-select: none; }
 .stage__empty { display: flex; align-items: center; justify-content: center; color: var(--text-muted); font-size: var(--fs-md); }
-.stage__svg { position: absolute; inset: 0; }
+.stage__svg { position: absolute; inset: 0; -webkit-user-drag: none; user-select: none; touch-action: none; }
 .ann { cursor: pointer; }
 .ann.is-sel > rect, .ann.is-sel > circle, .ann.is-sel > polygon { stroke-width: 3; }
 .ann.is-drag > rect, .ann.is-drag > polygon, .ann.is-drag > circle { stroke-dasharray: 6 4; }
