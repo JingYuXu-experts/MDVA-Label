@@ -282,17 +282,19 @@ function onHover(evt: MouseEvent): void {
 }
 function onHoverLeave(): void { hoverHandle.value = null }
 
-/** 拖拽中的实时坐标读数（native 图像像素，mono + tabular-nums） */
+/** 拖拽中的实时坐标读数（mono + tabular-nums）；前缀标明这串数字落在哪个坐标系（rev9 §5.2） */
+const coordBasis = computed(() => (store.fit ? 'native' : '画布'))
 function readText(a: DraftAnn, p: { x: number; y: number }): string {
+  const b = coordBasis.value
   if (a.geom === 'box') {
-    return `${Math.round(a.coords[2] - a.coords[0])}×${Math.round(a.coords[3] - a.coords[1])} @ ${Math.round(a.coords[0])},${Math.round(a.coords[1])}`
+    return `${b} ${Math.round(a.coords[2] - a.coords[0])}×${Math.round(a.coords[3] - a.coords[1])} @ ${Math.round(a.coords[0])},${Math.round(a.coords[1])}`
   }
-  if (a.geom === 'point') return `${Math.round(a.coords[0])}, ${Math.round(a.coords[1])}`
+  if (a.geom === 'point') return `${b} ${Math.round(a.coords[0])}, ${Math.round(a.coords[1])}`
   if (a.geom === 'poly' && dragHandle >= 0) {
-    return `${Math.round(a.coords[dragHandle * 2])}, ${Math.round(a.coords[dragHandle * 2 + 1])}`
+    return `${b} ${Math.round(a.coords[dragHandle * 2])}, ${Math.round(a.coords[dragHandle * 2 + 1])}`
   }
   if (a.geom === 'interval' || a.geom === 'level') return `${(a.coords[1] - a.coords[0]).toFixed(2)} s`
-  return `${Math.round(p.x)}, ${Math.round(p.y)}`
+  return `${b} ${Math.round(p.x)}, ${Math.round(p.y)}`
 }
 
 function normBox(c: number[]): number[] {
@@ -517,6 +519,9 @@ onBeforeUnmount(() => { if (throttleTimer) clearTimeout(throttleTimer); unbindGe
         <!-- 拖拽实时读数（跟随光标，mono + tabular-nums） -->
         <text v-if="readout" class="stage__readout" :x="readPos.x + 10" :y="readPos.y + 4">{{ readout }}</text>
       </svg>
+      <!-- 绝对定位角标：不改任何布局，读数的坐标系一眼可辨（rev9 §5.2 验收⑥"不得位移"） -->
+      <span v-if="store.nativeShown" class="stage__native num" data-testid="stage-native"
+        :data-native="store.nativeText">native {{ store.nativeText }}</span>
     </div>
   </div>
 </template>
@@ -540,6 +545,12 @@ onBeforeUnmount(() => { if (throttleTimer) clearTimeout(throttleTimer); unbindGe
 .draft { pointer-events: none; }
 .cursor-line { pointer-events: none; opacity: .8; }
 .stage__readout { font-family: var(--font-mono); font-variant-numeric: tabular-nums; font-size: 11px; fill: var(--text-primary); paint-order: stroke; stroke: #0d0f12; stroke-width: 3; pointer-events: none; }
+.stage__native {
+  position: absolute; left: var(--sp-2); top: 6px; pointer-events: none;
+  font-family: var(--font-mono); font-variant-numeric: tabular-nums; font-size: 10px;
+  color: var(--text-secondary); background: rgba(13, 15, 18, .72);
+  border: 1px solid var(--border); border-radius: var(--radius-control); padding: 0 5px;
+}
 .stage-spinner { position: absolute; top: 50%; left: 50%; z-index: 5; transform: translate(-50%, -50%); }
 .stage-spinner span { display: block; width: 14px; height: 14px; border: 2px solid var(--border-strong); border-top-color: var(--accent); border-radius: 50%; animation: spin .7s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }

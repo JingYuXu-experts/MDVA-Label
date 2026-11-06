@@ -82,7 +82,7 @@ watch(() => [ctx.dataset, ctx.version], () => {
         note="卡片与参数都来自 GET /api/export/formats 的元数据：后端加一种格式，界面自动多一张卡。"
         :done="!!store.chosen"
         :warn="store.chosen ? '' : '未选格式，导出不可用'"
-        :tone="store.chosen ? 'warning' : 'danger'"
+        tone="neutral"
       >
         <FormatCards />
         <ParamsForm :skip="[store.splitKey, store.seedKey].filter(Boolean)" />

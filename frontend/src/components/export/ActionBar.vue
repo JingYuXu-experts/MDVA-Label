@@ -180,7 +180,8 @@ const sentParams = computed(() => res.value?.params || null)
 <style scoped>
 .act { display: flex; flex-direction: column; gap: var(--sp-3); }
 .act__row { display: flex; align-items: center; gap: var(--sp-3); flex-wrap: wrap; }
-.act__suggest { font-size: var(--fs-xs); color: var(--warning); }
+/* 纯建议不含隐患，不占橙——橙只承载"有后果但可继续"的提醒态（rev10 §4） */
+.act__suggest { font-size: var(--fs-xs); color: var(--text-secondary); }
 .act__note { margin: 0; font-size: var(--fs-xs); color: var(--text-muted); line-height: 1.55; }
 .act__err { margin: 0; font-size: var(--fs-xs); color: var(--danger); word-break: break-all; }
 .result, .validate {

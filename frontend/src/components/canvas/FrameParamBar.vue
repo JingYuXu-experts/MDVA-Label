@@ -144,9 +144,11 @@ const ticks = computed(() => {
         <MSlider :model-value="store.frameParams.gamma ?? 1" :min="0.1" :max="2" :step="0.05" :format="fmt2"
           @update:model-value="store.setParam('gamma', $event)" />
       </span>
-      <span class="parambar__meta num" :title="fitTitle">
-        {{ store.modality }} · {{ Math.round(store.srcW) }}×{{ Math.round(store.srcH) }}
-        <span class="parambar__fit">画布 {{ store.frameW }}×{{ store.frameH }}</span>
+      <span class="parambar__meta num" :title="fitTitle" data-testid="frame-basis"
+        :data-native="store.nativeText" :data-render="`${store.frameW}×${store.frameH}`">
+        {{ store.modality }}
+        <span v-if="store.nativeShown" class="parambar__native">native {{ store.nativeText }} ·</span>
+        <span class="parambar__fit">渲染 {{ store.frameW }}×{{ store.frameH }}</span>
       </span>
     </div>
     <div v-if="isTime" ref="axisEl" class="axis" role="slider" tabindex="0"
@@ -170,6 +172,8 @@ const ticks = computed(() => {
 .slider-wrap { width: 120px; }
 .val { font-size: var(--fs-xs); color: var(--text-secondary); min-width: 34px; }
 .parambar__meta { margin-left: auto; font-size: var(--fs-xs); color: var(--text-muted); }
+/* 两个基准并列时各自标明来源：native 用后端 REQ-W15 字段，渲染用出图尺寸（rev9 §5.2） */
+.parambar__native { margin-left: 6px; color: var(--text-secondary); }
 .parambar__fit { margin-left: 6px; opacity: .75; }
 .axis { position: relative; height: 44px; background: var(--bg-raised); border-top: 1px solid var(--border); cursor: crosshair; user-select: none; }
 .axis__band { position: absolute; top: 0; bottom: 0; background: rgba(76,141,246,.22); border-left: 1px solid var(--accent); }

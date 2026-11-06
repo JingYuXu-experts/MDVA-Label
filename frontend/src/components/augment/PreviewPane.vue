@@ -85,7 +85,7 @@ const checkedAtText = computed(() => {
         <p v-else-if="frameBroken" class="before__fail" role="alert">
           这帧渲染失败（条目可能已不在当前版本，或后端渲染报错）：{{ store.exampleUri }}
         </p>
-        <p v-else class="before__fail">当前版本没有可显示的条目</p>
+        <p v-else class="before__empty">当前版本没有可显示的条目</p>
         <p class="before__cap">
           只有 before——增强后的图要在执行落盘后才有，右栏谱系行点开就是真 before/after 双联。
         </p>
@@ -159,7 +159,10 @@ const checkedAtText = computed(() => {
   max-width: 100%; max-height: 340px; border: 1px solid var(--border-strong);
   border-radius: var(--radius-control); background: #000; object-fit: contain;
 }
-.before__fail { margin: 0; font-size: var(--fs-xs); color: var(--warning); }
+/* 渲染失败是"这件事没成"，属失败态，不得降级成橙（rev10 §4） */
+.before__fail { margin: 0; font-size: var(--fs-xs); color: var(--danger); }
+/* 没有条目是空态，不是失败：用次级文字色，免得页面宣称出错（rev10 §4 边界） */
+.before__empty { margin: 0; font-size: var(--fs-xs); color: var(--text-secondary); }
 .before__cap { margin: 0; font-size: var(--fs-xs); color: var(--text-muted); line-height: 1.5; }
 .chain { width: 100%; border-collapse: collapse; font-size: var(--fs-xs); }
 .chain th, .chain td { text-align: left; padding: 6px var(--sp-2); border-bottom: 1px solid var(--border); }

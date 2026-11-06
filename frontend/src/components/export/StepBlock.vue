@@ -11,10 +11,13 @@ withDefaults(defineProps<{
   done?: boolean
   warn?: string
   /**
-   * 提示的分量（rev8 §5.5）：拦截态（不发请求、按钮禁用）用 danger，
-   * 提醒态（信息已如实呈现、不拦动作）用 warning。默认 warning。
+   * 提示的分量（rev9 §4 三档通则）：
+   * danger＝拦截态（用户已做出的输入使动作不可执行，必须由他纠正，含失败态）；
+   * warning＝提醒态（不拦动作但有后果，可继续）；
+   * neutral＝前置条件未满足（用户还没做错任何事，只是尚未填）。
+   * 默认 warning。颜色不得在具体步骤里写死，只由 tone 承载。
    */
-  tone?: 'warning' | 'danger'
+  tone?: 'warning' | 'danger' | 'neutral'
 }>(), { note: '', done: false, warn: '', tone: 'warning' })
 </script>
 
@@ -50,6 +53,8 @@ withDefaults(defineProps<{
 .step__warn--warning { color: var(--warning); }
 /* 拦截态与滑杆下方的 .split__sum.is-bad 同色同量级，避免同一句话两种分量（rev8 §5.5） */
 .step__warn--danger { color: var(--danger); font-weight: 600; }
+/* 前置条件未满足：次级文字色、不加粗——页面刚打开不得宣称"这里坏了"（rev9 §4） */
+.step__warn--neutral { color: var(--text-secondary); }
 .step__note { margin: 0; font-size: var(--fs-xs); color: var(--text-muted); line-height: 1.55; }
 .step__body { display: flex; flex-direction: column; gap: var(--sp-3); }
 </style>
