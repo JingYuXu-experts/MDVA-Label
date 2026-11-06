@@ -82,6 +82,7 @@ watch(() => [ctx.dataset, ctx.version], () => {
         note="卡片与参数都来自 GET /api/export/formats 的元数据：后端加一种格式，界面自动多一张卡。"
         :done="!!store.chosen"
         :warn="store.chosen ? '' : '未选格式，导出不可用'"
+        :tone="store.chosen ? 'warning' : 'danger'"
       >
         <FormatCards />
         <ParamsForm :skip="[store.splitKey, store.seedKey].filter(Boolean)" />
@@ -93,6 +94,7 @@ watch(() => [ctx.dataset, ctx.version], () => {
         note="train/val/test 三段比例；和不为 100% 时前端直接拦下，不发请求。"
         :done="store.splitValid"
         :warn="store.splitError"
+        :tone="store.splitError ? 'danger' : 'warning'"
       >
         <SplitSliders />
       </StepBlock>

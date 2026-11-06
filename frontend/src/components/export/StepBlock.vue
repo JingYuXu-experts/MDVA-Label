@@ -10,15 +10,20 @@ withDefaults(defineProps<{
   note?: string
   done?: boolean
   warn?: string
-}>(), { note: '', done: false, warn: '' })
+  /**
+   * 提示的分量（rev8 §5.5）：拦截态（不发请求、按钮禁用）用 danger，
+   * 提醒态（信息已如实呈现、不拦动作）用 warning。默认 warning。
+   */
+  tone?: 'warning' | 'danger'
+}>(), { note: '', done: false, warn: '', tone: 'warning' })
 </script>
 
 <template>
-  <section class="step" :class="{ 'is-done': done }">
+  <section class="step" :class="{ 'is-done': done }" :data-tone="warn ? tone : ''">
     <header class="step__head">
       <span class="step__no num" :class="{ 'is-done': done }">{{ done ? '✓' : no }}</span>
       <h2 class="step__title">{{ title }}</h2>
-      <span v-if="warn" class="step__warn" role="status">{{ warn }}</span>
+      <span v-if="warn" class="step__warn" :class="`step__warn--${tone}`" role="status">{{ warn }}</span>
     </header>
     <p v-if="note" class="step__note">{{ note }}</p>
     <div class="step__body">
@@ -41,7 +46,10 @@ withDefaults(defineProps<{
 }
 .step__no.is-done { border-color: var(--success); color: var(--success); }
 .step__title { margin: 0; font-size: var(--fs-lg); color: var(--text-primary); font-weight: 600; }
-.step__warn { margin-left: auto; font-size: var(--fs-xs); color: var(--warning); }
+.step__warn { margin-left: auto; font-size: var(--fs-xs); }
+.step__warn--warning { color: var(--warning); }
+/* 拦截态与滑杆下方的 .split__sum.is-bad 同色同量级，避免同一句话两种分量（rev8 §5.5） */
+.step__warn--danger { color: var(--danger); font-weight: 600; }
 .step__note { margin: 0; font-size: var(--fs-xs); color: var(--text-muted); line-height: 1.55; }
 .step__body { display: flex; flex-direction: column; gap: var(--sp-3); }
 </style>
