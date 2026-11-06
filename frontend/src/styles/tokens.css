@@ -1,0 +1,48 @@
+/* MDVA 视觉 Tokens — UI规格 v1.2 §2 唯一来源，组件内禁止硬编码色值/字号 */
+:root {
+  /* 颜色 */
+  --bg-base: #14161A;
+  --bg-panel: #1B1E24;
+  --bg-raised: #22262E;
+  --bg-hover: #2A2F38;
+  --border: #2E333C;
+  --border-strong: #3A404B;
+  --text-primary: #E6E8EB;
+  --text-secondary: #9AA1AC;
+  --text-muted: #6B7280;
+  --accent: #4C8DF6;
+  --accent-hover: #3D7BE0;
+  --accent-soft: rgba(76, 141, 246, 0.14);
+  --success: #3FB27F;
+  --warning: #D9A03F;
+  --danger: #E05252;
+
+  /* 字体 */
+  --font-ui: "Segoe UI", "Microsoft YaHei", system-ui, sans-serif;
+  --font-mono: "Cascadia Code", Consolas, monospace;
+  --fs-xs: 11px;
+  --fs-ui: 12px;
+  --fs-md: 13px;
+  --fs-lg: 15px;
+
+  /* 间距（基数 4px） */
+  --sp-1: 4px;
+  --sp-2: 8px;
+  --sp-3: 12px;
+  --sp-4: 16px;
+  --sp-5: 24px;
+  --sp-6: 32px;
+
+  /* 圆角：控件 3px、面板 4px、弹层 6px，不做 >6px */
+  --radius-control: 3px;
+  --radius-panel: 4px;
+  --radius-pop: 6px;
+
+  /* 阴影：仅悬浮层 */
+  --shadow-pop: 0 4px 16px rgba(0, 0, 0, 0.4);
+
+  /* 布局尺寸 */
+  --topbar-h: 40px;
+  --sidebar-w: 240px;
+  --rail-w: 48px;
+}
