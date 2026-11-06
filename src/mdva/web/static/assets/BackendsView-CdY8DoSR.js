@@ -1,0 +1,1 @@
+import{d as e,a,f as s,o as t,A as o,_ as c}from"./index-ChBiYLZM.js";const _={class:"placeholder"},n=e({__name:"BackendsView",setup(r){return(d,p)=>(t(),a("div",_,[s(o,{text:"后端（算法替换）视图开发中（里程碑 M4）。"})]))}}),i=c(n,[["__scopeId","data-v-3e926f14"]]);export{i as default};

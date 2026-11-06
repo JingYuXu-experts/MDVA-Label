@@ -9,6 +9,8 @@ import type {
   StatsResp, ProgressResp, ScanResp, ThumbsResp, TaskRow, AnnRow,
   CollectResp, FrameMeta, PreAnnotateResp,
   CleanPreviewResp, CleanRollbackResp, DroppedRow,
+  AugRecipesResp, AugSuggestResp, AugCheckResp, AugRunResp, AugReplayResp, AugRecipe,
+  AugLineageRow,
 } from './types'
 
 // ---- 5.1 元信息 ----
@@ -106,9 +108,27 @@ export const cleanRollback = (version: string, signal?: AbortSignal) =>
   postLong<CleanRollbackResp>('/clean/rollback', { version }, signal)
 export const cleanDropped = (version: string) =>
   get<{ dropped: DroppedRow[] }>('/clean/dropped', { version })
-export const runAugment = (version: string, recipe: Record<string, unknown>,
+export const runAugment = (version: string, recipe: AugRecipe,
   uris: string[], author = '', signal?: AbortSignal) =>
-  postLong<Record<string, unknown>>('/augment/run', { version, recipe, uris, author }, signal)
+  postLong<AugRunResp>('/augment/run', { version, recipe, uris, author }, signal)
+
+// ---- 5.7 增强（配方元数据 / 推荐 / 告警检查 / 谱系 / 复现）----
+/** 三 Tab 的唯一数据源：ops（算子表）+ presets（学科配方）+ task_presets（任务类型→预设） */
+export const getAugmentRecipes = (signal?: AbortSignal) =>
+  get<AugRecipesResp>('/augment/recipes', {}, { signal })
+/** dataset 显式传（契约 §2.8）；返回可直接用的 preset + recipe + 为什么这么配 */
+export const augmentSuggest = (dataset: string, signal?: AbortSignal) =>
+  post<AugSuggestResp>('/augment/suggest', { dataset }, { signal })
+/** 执行前强制发生的告警检查：category 传数据集学科，才能命中"星图上下镜像"这类学科约束 */
+export const augmentCheck = (uris: string[], recipe: AugRecipe, category = '',
+  signal?: AbortSignal) =>
+  post<AugCheckResp>('/augment/check', { uris, recipe, category }, { signal })
+/** 谱系逐行 = run 落盘的 written 记录（含 written 相对 uri，after 帧直接走 /api/frame） */
+export const augmentLineage = (version: string, signal?: AbortSignal) =>
+  get<{ lineage: AugLineageRow[] }>('/augment/lineage', { version }, { signal })
+/** version 必填（不吃上下文默认）；校验的是 seed 谱系链，不是重算像素 */
+export const augmentReplay = (version: string, signal?: AbortSignal) =>
+  postLong<AugReplayResp>('/augment/replay', { version }, signal)
 export const runExport = (version: string, format: string, params: Record<string, unknown> = {},
   out_dir = '', scripts = false, signal?: AbortSignal) =>
   postLong<Record<string, unknown>>('/export',

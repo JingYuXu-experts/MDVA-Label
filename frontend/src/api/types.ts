@@ -230,3 +230,105 @@ export interface CleanRollbackResp {
   error?: string
   detail?: string
 }
+
+// ---- 5.7 增强（配方 → 告警检查 → 执行 → 谱系与可复现验证）----
+
+/** 增强算子元数据：kind=augment 的 ops，参数控件与清洗共用 OpParamSpec */
+export interface AugOpMeta {
+  name: string
+  description: string
+  schema: Record<string, OpParamSpec>
+}
+/** 配方里的一个算子项（后端 Recipe.ops 的元素，name 必填、params 可省） */
+export interface AugOpSpec {
+  name: string
+  params?: Record<string, unknown>
+}
+/**
+ * 增强配方 = 后端 lineage.Recipe 的线上形态。
+ * seed 是可复现的前提（replay 按它重抽），factor=每张原件产几个副本，
+ * limit=最多处理多少条，index=体/视频取哪一刀。
+ */
+export interface AugRecipe {
+  seed: number
+  factor: number
+  ops: AugOpSpec[]
+  limit?: number | null
+  index?: number
+}
+export interface AugPreset {
+  name: string
+  title: string
+  reason: string
+  recipe: AugRecipe
+}
+/** GET /api/augment/recipes：三 Tab 的唯一数据源 */
+export interface AugRecipesResp {
+  ops: AugOpMeta[]
+  presets: AugPreset[]
+  task_presets: Record<string, string>
+}
+export interface AugSuggestResp {
+  preset: AugPreset
+  recipe: AugRecipe
+  reason: string
+}
+/** check 只回告警原文列表（空数组 = 可以放心跑）；抽样参数不在这里回（rev6 A 级口径） */
+export interface AugCheckResp {
+  warnings: string[]
+}
+/** 谱系行 = run 落盘的 written 记录：原件 uri → 写出的 uri + 逐条抽样参数链 */
+export interface AugLineageRow {
+  source: string
+  rep: number
+  modality: string
+  written: string
+  bytes: number
+  chain: { op: string; params: Record<string, unknown> }[]
+  specs?: { name: string; params?: Record<string, unknown> }[]
+  source_shape?: number[]
+  width?: number
+  height?: number
+  n_samples?: number
+  aux?: Record<string, Record<string, unknown>>
+}
+export interface AugRunSummary {
+  n_sources: number
+  n_generated: number
+  n_masks: number
+  n_series: number
+  n_files: number
+}
+export interface AugRunResp {
+  version?: string
+  version_id?: string
+  parent?: string
+  recipe?: AugRecipe
+  out_dir?: string
+  written?: AugLineageRow[]
+  summary?: AugRunSummary
+  n_inherited?: number
+  task_id?: string
+  error?: string
+  detail?: string
+}
+/**
+ * replay 校验的是 seed 谱系链（不是重算像素），故界面措辞为"参数链逐条一致"。
+ * why 实测三类：参数不一致 / 重放多出了副本 / 重放少了这条。
+ */
+export interface AugReplayDiff {
+  uri: string
+  rep: number
+  why: string
+  stored?: unknown
+  replayed?: unknown
+}
+export interface AugReplayResp {
+  identical: boolean
+  recipe?: AugRecipe
+  n_jobs: number
+  n_stored: number
+  diff: AugReplayDiff[]
+  error?: string
+  detail?: string
+}
