@@ -332,3 +332,78 @@ export interface AugReplayResp {
   error?: string
   detail?: string
 }
+
+// ---- 5.9 导出（格式 → 划分 → 导出 → 回读校验 → 报告）----
+
+/** 导出格式元数据：GET /api/export/formats 的 formats 项，参数表单完全由 schema 生成 */
+export interface ExportFormatMeta {
+  name: string
+  description: string
+  schema: Record<string, OpParamSpec>
+}
+export interface ExportFormatsResp {
+  formats: ExportFormatMeta[]
+  /** 后端默认落盘根（界面只读显示，用户不填就用它） */
+  out_dir: string
+}
+/** split.summary()：{n, counts{fold:n}, ratios{fold:0.xxxx}} */
+export interface ExportSplitSummary {
+  n: number
+  counts: Record<string, number>
+  ratios: Record<string, number>
+}
+/**
+ * 导出报告 = 落盘的 dataset_report.json 同一份对象（后端 write_report）。
+ * 不同格式的计数字段不一样（coco 有 per_split、yolo 有 n_labels_per_fold、voc 有 split_files），
+ * 所以界面按"有哪些键就展示哪些"处理，不假设固定形状。
+ */
+export interface ExportRunResp {
+  format: string
+  dataset?: string
+  dataset_id?: string
+  type?: string
+  root?: string
+  version?: string
+  parent?: string | null
+  op?: string
+  params?: Record<string, unknown>
+  counts?: Record<string, unknown>
+  issues?: unknown[]
+  files?: string[]
+  out_dir?: string
+  task_id?: string
+  n_images?: number
+  n_annotations?: number
+  n_categories?: number
+  n_skipped?: number
+  skipped?: Record<string, unknown>[]
+  spatial_annotations?: number
+  split?: ExportSplitSummary
+  per_split?: Record<string, { images: number; annotations: number }>
+  scripts?: Record<string, string>
+  [key: string]: unknown
+}
+/**
+ * 后端 export.validate.validate() 的原文：一次回读对账的全部结论。
+ * issues 最多回传 MAX_ISSUES(50) 条，但 n_issues 是真实累计计数——
+ * 界面必须用 n_issues 报条数，否则"51 条问题"会显示成"50 条"假装可控。
+ */
+export interface ExportValidateCheck {
+  path?: string
+  format?: string
+  version?: string
+  ok: boolean
+  issues: string[]
+  checked: Record<string, unknown>
+  counts: Record<string, unknown>
+  n_issues?: number
+}
+/** POST /api/export/validate 的实际形状：{ok, summary, check}，结论与明细都在 check 里 */
+export interface ExportValidateResp {
+  ok: boolean
+  /** 后端给出的一行结论（validate.summarize），原样转述 */
+  summary?: string
+  check?: ExportValidateCheck
+  error?: string
+  detail?: string
+}

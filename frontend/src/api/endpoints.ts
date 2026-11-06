@@ -11,6 +11,7 @@ import type {
   CleanPreviewResp, CleanRollbackResp, DroppedRow,
   AugRecipesResp, AugSuggestResp, AugCheckResp, AugRunResp, AugReplayResp, AugRecipe,
   AugLineageRow,
+  ExportFormatsResp, ExportRunResp, ExportValidateResp,
 } from './types'
 
 // ---- 5.1 元信息 ----
@@ -131,8 +132,19 @@ export const augmentReplay = (version: string, signal?: AbortSignal) =>
   postLong<AugReplayResp>('/augment/replay', { version }, signal)
 export const runExport = (version: string, format: string, params: Record<string, unknown> = {},
   out_dir = '', scripts = false, signal?: AbortSignal) =>
-  postLong<Record<string, unknown>>('/export',
+  postLong<ExportRunResp>('/export',
     { version, format, params, out_dir, scripts }, signal)
+
+// ---- 5.9 导出（格式元数据 / 执行 / 回读校验 / 历史报告）----
+/** 格式卡片与参数表单的唯一数据源；out_dir 是后端默认落盘根（界面只读） */
+export const getExportFormats = (signal?: AbortSignal) =>
+  get<ExportFormatsResp>('/export/formats', {}, { signal })
+/** dir 必填（校验目标是哪个导出目录），version 显式传（契约 §2.8） */
+export const exportValidate = (dir: string, version: string, signal?: AbortSignal) =>
+  postLong<ExportValidateResp>('/export/validate', { dir, version }, signal)
+/** 历史=任务表留痕（非进度源，§4）：这个版本导出过哪些次 */
+export const getExportReport = (version: string, signal?: AbortSignal) =>
+  get<{ reports: TaskRow[] }>('/export/report', { version }, { signal })
 export const runBench = (root: string, categories = '', only: string[] = [],
   limit = 4, stubs = false, signal?: AbortSignal) =>
   postLong<Record<string, unknown>>('/bench',

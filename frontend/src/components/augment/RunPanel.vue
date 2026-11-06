@@ -12,16 +12,36 @@ import MDialog from '@/components/ui/MDialog.vue'
 import MTag from '@/components/ui/MTag.vue'
 import MEmpty from '@/components/ui/MEmpty.vue'
 import MProgress from '@/components/ui/MProgress.vue'
+import MSkeleton from '@/components/ui/MSkeleton.vue'
 import { frameUrl } from '@/api/endpoints'
 import { useAugmentStore } from '@/stores/augment'
 import { useCtxStore } from '@/stores/ctx'
 import { useTasksStore } from '@/stores/tasks'
+import type { AugLineageRow } from '@/api/types'
 
 const store = useAugmentStore()
 const ctx = useCtxStore()
 const tasks = useTasksStore()
 
 const confirmRun = ref(false)
+/**
+ * 双联帧的加载态（uri|kind → 'ok' | 'err'）：after 帧是首次冷渲染，
+ * 未出图前留骨架而不是留空白——两张并排、一张空着会被读成"增强没效果"。
+ */
+const frames = ref<Record<string, 'ok' | 'err'>>({})
+const frameKey = (uri: string, kind: string) => `${uri}|${kind}`
+function markFrame(uri: string, kind: string, ok: boolean) {
+  frames.value = { ...frames.value, [frameKey(uri, kind)]: ok ? 'ok' : 'err' }
+}
+function frameReady(uri: string, kind: string): boolean {
+  const st = frames.value[frameKey(uri, kind)]
+  return st === 'ok' || st === 'err'
+}
+function frameFailed(row: AugLineageRow): string {
+  if (frames.value[frameKey(row.written, 'a')] === 'err') return row.written
+  if (frames.value[frameKey(row.source, 'b')] === 'err') return row.source
+  return ''
+}
 
 const chainText = computed(() => store.chain.map(c => c.name).join(' → '))
 const runWhy = computed(() => {
@@ -118,21 +138,42 @@ async function doReplay() {
             <span class="lin__bytes num">{{ bytesOf(row.bytes) }}</span>
           </button>
           <div v-if="store.openRow === idx" class="lin__detail">
-            <!-- B 级：真 before/after 双联，两帧都走 /api/frame -->
-            <div class="pair">
+            <!-- B 级：真 before/after 双联，两帧都走 /api/frame；未出图前先给骨架 -->
+            <div class="pair" data-level="B">
               <figure class="pair__cell">
-                <img class="pair__img" :src="frameUrl(row.source)" :alt="`原件：${row.source}`" loading="lazy">
+                <MSkeleton class="pair__sk" :show="!frameReady(row.source, 'b')" variant="grid" :count="1" />
+                <img
+                  class="pair__img"
+                  :class="{ 'is-pending': !frameReady(row.source, 'b') }"
+                  :src="frameUrl(row.source)"
+                  :alt="`原件：${row.source}`"
+                  loading="lazy"
+                  @load="markFrame(row.source, 'b', true)"
+                  @error="markFrame(row.source, 'b', false)"
+                >
                 <figcaption class="pair__cap">
                   before<span class="mono">{{ row.source_shape ? ` ${row.source_shape.join('×')}` : '' }}</span>
                 </figcaption>
               </figure>
               <figure class="pair__cell">
-                <img class="pair__img" :src="frameUrl(row.written)" :alt="`增强副本：${row.written}`" loading="lazy">
+                <MSkeleton class="pair__sk" :show="!frameReady(row.written, 'a')" variant="grid" :count="1" />
+                <img
+                  class="pair__img"
+                  :class="{ 'is-pending': !frameReady(row.written, 'a') }"
+                  :src="frameUrl(row.written)"
+                  :alt="`增强副本：${row.written}`"
+                  loading="lazy"
+                  @load="markFrame(row.written, 'a', true)"
+                  @error="markFrame(row.written, 'a', false)"
+                >
                 <figcaption class="pair__cap">
                   after<span class="mono">{{ bytesOf(row.bytes) }}</span>
                 </figcaption>
               </figure>
             </div>
+            <p v-if="frameFailed(row)" class="pair__fail">
+              这一条的帧没能渲染出来（后端出图失败或文件已不在）：{{ frameFailed(row) }}
+            </p>
             <p class="pair__after mono" :title="row.written">{{ row.written }}</p>
             <h4 class="lin__h4">逐条抽样参数链（服务端按 seed 抽的实际值）</h4>
             <ol class="lchain">
@@ -235,11 +276,16 @@ async function doReplay() {
 .lin__h4 { margin: 0; font-size: var(--fs-xs); color: var(--text-secondary); font-weight: 600; }
 .lin__aux { margin: 0; font-size: var(--fs-xs); color: var(--text-muted); }
 .pair { display: grid; grid-template-columns: 1fr 1fr; gap: var(--sp-2); }
-.pair__cell { margin: 0; display: flex; flex-direction: column; gap: 4px; }
+.pair__cell { position: relative; margin: 0; display: flex; flex-direction: column; gap: 4px; }
 .pair__img {
   width: 100%; height: 96px; object-fit: contain; background: #000;
   border: 1px solid var(--border-strong); border-radius: var(--radius-control);
 }
+.pair__img.is-pending { visibility: hidden; }
+.pair__sk { position: absolute; left: 0; right: 0; top: 0; height: 96px; z-index: 1; }
+.pair__sk :deep(.skeleton) { height: 96px; padding: 0; display: block; }
+.pair__sk :deep(.skeleton__cell) { height: 96px; width: 100%; }
+.pair__fail { margin: 0; font-size: var(--fs-xs); color: var(--danger); word-break: break-all; }
 .pair__cap { font-size: var(--fs-xs); color: var(--text-secondary); display: flex; justify-content: space-between; gap: 4px; }
 .pair__cap .mono { color: var(--text-muted); }
 .pair__after {
