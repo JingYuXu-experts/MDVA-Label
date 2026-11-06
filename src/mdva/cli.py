@@ -831,7 +831,7 @@ def build_parser() -> argparse.ArgumentParser:
     locator(p)
     p.set_defaults(func=cmd_clean)
 
-    p = sub.add_parser("augment", help="数据增强：配方 + seed 谱系，可逐字节重放")
+    p = sub.add_parser("augment", help="数据增强：配方 + seed 谱系，重放校验参数链逐条一致")
     p.add_argument("--preset", default="", help="aerospace / medical / cv_segmentation / series")
     p.add_argument("--ops", default="", help="覆盖预设的算子串，写法同 clean")
     p.add_argument("--config", default="")

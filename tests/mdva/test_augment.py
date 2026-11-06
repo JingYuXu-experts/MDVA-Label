@@ -337,7 +337,7 @@ def test_same_seed_produces_byte_identical_images(store, field):
     b = AUG.run(s, vid, RECIPE, uris=[field["png"]], out_dir=root / "out2")
     da = {name(r["written"]): sha(r["written"]) for r in a["written"]}
     db = {name(r["written"]): sha(r["written"]) for r in b["written"]}
-    assert len(da) == 2 and da == db, "同 seed 同配方必须逐字节可复现"
+    assert len(da) == 2 and da == db, "同 seed 同配方生成的文件必须 sha 逐一对上"
     assert a["written"][0]["specs"] == b["written"][0]["specs"]
 
 
