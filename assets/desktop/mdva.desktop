@@ -2,7 +2,7 @@
 Encoding = UTF-8
 Name = MDVA
 GenericName = MDVA
-GenericName[zh_CN] = 本地化多模态智能标注平台
+GenericName[zh_CN] = 本地化多模态科研标注平台
 Type = Application
 Icon = mdva
 Exec = python -m mdva serve

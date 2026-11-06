@@ -1,8 +1,10 @@
 cff-version: 1.2.0
 message: "If you use this software, please cite it as below."
-title: "MDVA: A Localized Multimodal Intelligent Annotation Platform"
+title: "MDVA：本地化多模态科研标注平台"
 authors:
-- name: "MDVA Team"
-license: GPL-3.0
+  - family-names: "Xu"
+    given-names: "Jingyu"
 repository-code: "https://github.com/JingYuXu-experts/MDVA-Label"
-# 占位条目：署名格式/ORCID/中英文标题以发起人确认为准，确认后由产品经理定稿替换。
+url: "https://github.com/JingYuXu-experts/MDVA-Label"
+license: GPL-3
+version: 0.1.0

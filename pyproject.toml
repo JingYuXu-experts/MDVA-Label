@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 # https://setuptools.pypa.io/en/latest/userguide/pyproject_config.html
 [project]
 name = "mdva-label"
-description = "MDVA：本地化多模态智能标注平台（五模态浏览/标注/清洗/增强/导出，完全离线，数据不出机器）"
+description = "MDVA：本地化多模态科研标注平台（五模态浏览/标注/清洗/增强/导出，完全离线，数据不出机器）"
 readme = "README.md"
 requires-python = ">= 3.10"
 keywords = [
