@@ -384,3 +384,22 @@ def test_series_panel_uses_the_font_for_axis_labels():
     assert info["n_samples"] == 200
     # 底部刻度带必须有墨迹（画不出字时整条都是空的）
     assert (rgb[160:, :, :].max(axis=2) > 60).sum() > 40
+
+
+def test_spatial_render_ignores_series_only_style_keys(tmp_path):
+    """契约 §2.7：23 个帧键是全模态共用参数面。cube 收到时序专属键
+    （channel/method/ymin/ymax/out_width）必须忽略而不是 TypeError 500——
+    M2 期前端多发一个 channel 就把整幅画布打成了黑帧。"""
+    pytest.importorskip("astropy")
+    from mdva import io, synth
+
+    path = synth.write_fits(tmp_path / "cube.fits", synth.cube((6, 32, 32), seed=1), {})
+    item = io.load_any(str(path))
+    assert item.modality == Modality.CUBE.value
+    res = render.render_item(item, size=(48, 48), window=Slice(index=2),
+                             style={"channel": 3, "method": "minmax", "ymin": 0.0,
+                                    "ymax": 1.0, "out_width": 900, "stretch": "sqrt"})
+    assert res.rgb.shape[:2] == (48, 48)
+    clean = render.render_item(item, size=(48, 48), window=Slice(index=2),
+                               style={"stretch": "sqrt"})
+    assert np.array_equal(res.rgb, clean.rgb), "被忽略的键不许偷偷影响画面"

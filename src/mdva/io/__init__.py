@@ -79,6 +79,30 @@ def _stack_ndim(uri) -> Optional[int]:
         return None
 
 
+def _fits_ndim(uri) -> Optional[int]:
+    """主头 NAXIS——2880 字节块 × 80 字符卡，不必为嗅探一个数字开整个 astropy。
+
+    只读主 HDU；主头为空的扩展型 FITS 读不到维数，按 image 口径回退，
+    与改动前行为一致，不做无界的整文件扫描。
+    """
+    try:
+        with open(uri, "rb") as fh:
+            block = fh.read(2880)
+    except OSError:
+        return None
+    for i in range(0, len(block) - 79, 80):
+        card = block[i:i + 80].decode("ascii", "replace")
+        if card.split("/")[0].strip() == "END":
+            return None
+        key, sep, value = card.partition("=")
+        if sep and key.strip() == "NAXIS":
+            try:
+                return int(value.split("/")[0].strip())
+            except ValueError:
+                return None
+    return None
+
+
 def _is_number(cell: str) -> bool:
     try:
         float(cell)
@@ -103,6 +127,15 @@ def sniff(uri) -> str:
         if ndim is not None and ndim >= 3:
             return Modality.VIDEO.value
         return Modality.SERIES.value
+
+    if suffix in image.FITS_SUFFIXES:
+        # FITS 按表观后缀只能是 image，但 3 维数据加载后是 cube。
+        # items/scan 用 sniff、frame/meta 用加载结果，两处必须同一口径，
+        # 否则前端会看到同一个文件两个模态。解析主头 NAXIS，读不到就退回后缀表。
+        ndim = _fits_ndim(uri)
+        if ndim is not None and ndim >= 3:
+            return Modality.CUBE.value
+        return modality_of(suffix) or ""
 
     if suffix not in _AMBIGUOUS:
         return modality_of(suffix) or ""

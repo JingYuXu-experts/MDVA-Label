@@ -24,6 +24,13 @@ def _is_frame_source(obj) -> bool:
     return hasattr(obj, "frame") and hasattr(obj, "n_frames")
 
 
+def _kw_names(func) -> frozenset:
+    import inspect
+
+    return frozenset(p.name for p in inspect.signature(func).parameters.values()
+                     if p.kind in (p.KEYWORD_ONLY, p.POSITIONAL_OR_KEYWORD))
+
+
 def _view_index(item: DataItem, window: Slice, n_views: int) -> int:
     """把 Slice 折算成切片序号：有时间基准就按时间取，否则按序号。"""
     last = max(0, n_views - 1)
@@ -183,6 +190,10 @@ def render_array(
     return canvas, info
 
 
+#: 空间分支只认 render_array 形参表里的键（见 render_item 的 §2.7 忽略口径）
+_ARRAY_KEYS = _kw_names(render_array)
+
+
 def render_item(
     item: DataItem,
     size: Tuple[int, int] = (512, 512),
@@ -198,6 +209,10 @@ def render_item(
     if item.modality in (Modality.IMAGE.value, Modality.CUBE.value, Modality.VIDEO.value):
         arr = pick_slice(item, sl)
         style.setdefault("palette", item.meta.get("palette"))
+        # 契约 §2.7 的 23 个帧键是全模态共用参数面：channel/method/ymin/ymax/
+        # out_width 这些时序专属键，空间模态收到就静默忽略，而不是透传进
+        # render_array 抛 TypeError 变 500——前端多发一个键不该让整幅帧黑屏。
+        style = {k: v for k, v in style.items() if k in _ARRAY_KEYS}
         rgb, info = render_array(arr, size, **style)
         subtitle = _array_subtitle(item, info)
         if item.modality == Modality.VIDEO.value:

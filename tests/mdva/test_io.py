@@ -399,3 +399,20 @@ def test_common_span_ignores_untimed_items():
     assert untimed.t_ref is None and untimed.time_span[0] == float("-inf")
     assert io.common_span([timed, untimed]) == (100.0, 200.0)
     assert io.common_span([untimed]) == (float("-inf"), float("inf"))
+
+
+def test_sniff_fits_agrees_with_loaded_modality(tmp_path):
+    """items/scan 用 sniff、frame/meta 用加载结果——同一个 cube.fits 不能一处报
+    image 一处报 cube（M2.1 反馈：前端只信一处，两处口径必须同源）。"""
+    pytest.importorskip("astropy")
+    from mdva import synth
+
+    cube = synth.write_fits(tmp_path / "cube.fits", synth.cube((6, 32, 32), seed=1), {})
+    img = synth.write_fits(tmp_path / "img.fits",
+                           synth.star_field(shape=(64, 64), n_sources=5, seed=2)[0], {})
+    assert io.sniff(str(cube)) == Modality.CUBE.value == io.load_any(str(cube)).modality
+    assert io.sniff(str(img)) == Modality.IMAGE.value == io.load_any(str(img)).modality
+
+    broken = tmp_path / "broken.fits"
+    broken.write_bytes(b"\x00\x01garbage")
+    assert io.sniff(str(broken)) == Modality.IMAGE.value   # 读不到头退回后缀表，不崩
