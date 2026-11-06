@@ -268,6 +268,9 @@ def test_preview_matches_apply(store, images):
     report = clean.apply(s, vid, specs, uris=uris, out_dir=root / "out")
     assert preview["n_dropped"] == report["summary"]["n_dropped"] == 1
     assert preview["n_kept"] == report["summary"]["n_kept"] == 2
+    # M4-A：预览阶段就能拿到逐条命中清单（与 apply 报告同一条代码路径、同一形状）
+    assert {d["uri"] for d in preview["dropped"]} == {d["uri"] for d in report["dropped"]}
+    assert set(preview["dropped"][0]) == {"uri", "op", "reason", "score"}
 
 
 def test_apply_never_touches_source_files(store, images):

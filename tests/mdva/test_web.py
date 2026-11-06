@@ -326,8 +326,12 @@ def test_clean_preview_apply_dropped_rollback(stack, tmp_path):
     dup = tmp_path / "副本.fits"
     dup.write_bytes(Path(scene).read_bytes())
     specs = [{"name": "dedup"}]
-    assert post(ws, "/clean/preview", {"uris": [scene, str(dup)],
-                                       "specs": specs})["n_dropped"] == 1
+    pv = post(ws, "/clean/preview", {"uris": [scene, str(dup)], "specs": specs})
+    assert pv["n_dropped"] == 1
+    # REQ-W09（M4-A 裁决）：预览阶段就有逐条命中清单，uri 为 API 同口径
+    hit = pv["dropped"][0]
+    assert hit["op"] == "dedup"
+    assert hit["uri"] in {(data / "image_field.fits").relative_to(root).as_posix(), str(dup)}
     applied = post(ws, "/clean/apply", {"version": vid, "uris": [scene, str(dup)],
                                         "specs": specs})
     assert applied["summary"]["n_kept"] == 1

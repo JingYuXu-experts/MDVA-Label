@@ -807,8 +807,18 @@ class Hub:
     def clean_preview(self, uris: Sequence, specs: Sequence, calibration: str = "") -> dict:
         from .. import clean as CL
 
-        return _plain(CL.preview(CL.load_items(self._abs(uris)), specs,
-                                 _calibration_or_none(self.store.to_abs(calibration))))
+        # REQ-W10：预览走 load_item 的 LRU（同 uri 且磁盘指纹未变复用解析结果）。
+        # 之前每次滑块改动都经 CL.load_items 全量重开文件——实测 82 路 10s、
+        # 演示集 7 路约 6s；滑杆连续改动恰恰是重复率最高的场景。错误形态与
+        # load_items 保持一致（ValueError 文案不变，路由层 400 口径不动）。
+        items = []
+        for u in uris:
+            try:
+                items.append(self.load_item(u))
+            except Exception as exc:
+                raise ValueError(f"数据项读不出来：{u}（{exc}）") from None
+        return self._rel(_plain(CL.preview(items, specs,
+                                 _calibration_or_none(self.store.to_abs(calibration)))))
 
     def clean_apply(self, version_id: str, specs: Sequence, uris: Sequence = (),
                     calibration: str = "", write_transformed: bool = False,

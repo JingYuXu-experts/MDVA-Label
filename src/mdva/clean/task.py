@@ -134,8 +134,15 @@ def _handles(op, item) -> bool:
 
 
 def preview(items, specs, calibration=None) -> dict:
-    """只算不改：给界面滑杆用。与 apply() 走同一条 evaluate()。"""
-    return evaluate(items, specs, calibration).summary()
+    """只算不改：给界面滑杆用。与 apply() 走同一条 evaluate()。
+
+    M4-A 起附带逐条命中清单 dropped（与 apply 报告同一条代码路径、同一形状），
+    清洗视图的"命中条目缩略列表"预览阶段即可渲染，不需要先执行。
+    """
+    result = evaluate(items, specs, calibration)
+    out = result.summary()
+    out["dropped"] = result.dropped
+    return out
 
 
 # ---------------------------------------------------------------------- 执行
