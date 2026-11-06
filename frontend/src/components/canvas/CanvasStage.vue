@@ -113,6 +113,9 @@ const readPos = ref({ x: 0, y: 0 })
 const hitHalf = computed(() => 6 / store.zoom)
 const visHalf = computed(() => 4 / store.zoom)
 
+/** 读数前缀：后端给出原生尺寸才标 native，null（series/event）时不标——不给同一个数值起第二个名字（rev12 §5.2） */
+const coordBasis = computed(() => (store.nativeShown ? 'native ' : ''))
+
 function geomAllowed(g: Geom): boolean {
   if (g === 'interval' || g === 'level') return store.isTimeModality
   return true
@@ -282,8 +285,12 @@ function onHover(evt: MouseEvent): void {
 }
 function onHoverLeave(): void { hoverHandle.value = null }
 
-/** 拖拽中的实时坐标读数（mono + tabular-nums）；前缀标明这串数字落在哪个坐标系（rev9 §5.2） */
-const coordBasis = computed(() => (store.fit ? 'native' : '画布'))
+/**
+ * 拖拽中的实时坐标读数（mono + tabular-nums）。
+ * 前缀按 rev12 §5.2：同一个数值只允许一个名字——有原生尺寸可指时就恒标 native，
+ * 后端报 null（series/event 没有原生图像尺寸）时不写前缀，绝不把它改名成"画布 native"
+ * 或谎称存在 native 坐标系（rev9"null 不显示该项"同一条线）。
+ */
 function readText(a: DraftAnn, p: { x: number; y: number }): string {
   const b = coordBasis.value
   if (a.geom === 'box') {
