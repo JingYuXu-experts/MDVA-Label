@@ -137,8 +137,35 @@ function unbindGesture(): void {
 function resetGesture(): void {
   dragLocalId.value = null; dragHandle = -1; draft.value = null
   readout.value = ''
+  hoverHandle.value = null
   unbindGesture()
 }
+
+/** 句柄胜出者（UI规格 v1.4 rev4）：低 zoom 下相邻 12px 命中层会重叠，
+ *  命中不再交给 DOM 顺序，而是取屏幕像素距指针最近的那个；hover 高亮与 mousedown
+ *  用同一个函数，保证"高亮哪条边就拖哪条边"。 */
+interface HandlePick { id: number; handle: number; dist: number }
+const hoverHandle = ref<{ id: number; handle: number } | null>(null)
+
+function pickHandle(evt: MouseEvent): HandlePick | null {
+  const svg = svgEl.value
+  if (!svg) return null
+  let best: HandlePick | null = null
+  for (const h of Array.from(svg.querySelectorAll('g.handle'))) {
+    const gid = Number(h.closest('g.ann')?.getAttribute('data-id'))
+    const a = store.draftAnns.find((x) => x.localId === gid)
+    if (!a || a.state === 'approved') continue
+    const b = h.getBoundingClientRect()
+    if (evt.clientX < b.left || evt.clientX > b.right || evt.clientY < b.top || evt.clientY > b.bottom) continue
+    const dist = Math.hypot(evt.clientX - (b.left + b.width / 2), evt.clientY - (b.top + b.height / 2))
+    if (!best || dist < best.dist) best = { id: gid, handle: Number(h.getAttribute('data-handle')), dist }
+  }
+  return best
+}
+const isHot = (id: number, handle: number): boolean =>
+  hoverHandle.value?.id === id && hoverHandle.value?.handle === handle
+/** 胜出句柄视觉层放大到 ~10px（命中层维持 12px 不随 zoom 变，rev1 口径不动） */
+const hotHalf = computed(() => 5 / store.zoom)
 
 function onDown(evt: MouseEvent): void {
   if (!store.currentUri) return
@@ -149,17 +176,18 @@ function onDown(evt: MouseEvent): void {
   const cn = toCanvas(evt)
   const p = toNative(evt)
   if (store.mode === 'select') {
-    const g = (evt.target as Element).closest('g.ann')
-    const handle = (evt.target as Element).closest('[data-handle]')
-    if (handle) {
-      const id = Number(handle.closest('g.ann')?.getAttribute('data-id'))
-      const a = store.draftAnns.find((x) => x.localId === id)
+    const hit = pickHandle(evt)
+    if (hit) {
+      const a = store.draftAnns.find((x) => x.localId === hit.id)
       if (!a || a.state === 'approved') return
-      dragLocalId.value = id; dragHandle = Number(handle.getAttribute('data-handle'))
+      dragLocalId.value = hit.id; dragHandle = hit.handle
       dragStart = p; dragStartCn = cn; dragOrig = [...a.coords]
+      if (store.selId !== hit.id) store.select(hit.id)
+      hoverHandle.value = null
       bindGesture()
       return
     }
+    const g = (evt.target as Element).closest('g.ann')
     if (g) {
       const id = Number(g.getAttribute('data-id'))
       if (id !== vertexEditId.value) leaveVertexSession(true)
@@ -241,13 +269,18 @@ function onMove(evt: MouseEvent): void {
   }
 }
 
-/** 悬停光标（非手势期，绑在 svg 上） */
+/** 悬停：胜出句柄即时高亮（rev4「拖错可即时察觉」）+ 移动光标 */
 function onHover(evt: MouseEvent): void {
   if (dragLocalId.value != null || draft.value) return
   if (store.mode !== 'select' || !svgEl.value) return
-  const g = (evt.target as Element).closest('g.ann')
-  svgEl.value.style.cursor = g ? 'move' : 'default'
+  const hit = pickHandle(evt)
+  hoverHandle.value = hit ? { id: hit.id, handle: hit.handle } : null
+  if (!hit) {
+    const g = (evt.target as Element).closest('g.ann')
+    svgEl.value.style.cursor = g ? 'move' : 'default'
+  }
 }
+function onHoverLeave(): void { hoverHandle.value = null }
 
 /** 拖拽中的实时坐标读数（native 图像像素，mono + tabular-nums） */
 function readText(a: DraftAnn, p: { x: number; y: number }): string {
@@ -399,6 +432,7 @@ onBeforeUnmount(() => { if (throttleTimer) clearTimeout(throttleTimer); unbindGe
         :height="store.frameH"
         @mousedown="onDown"
         @mousemove="onHover"
+        @mouseleave="onHoverLeave"
         @dblclick="onDbl"
       >
         <!-- 已存标注：几何经 fit 正映射，coords 原值即 Ann 存储值（native 图像像素） -->
@@ -419,8 +453,13 @@ onBeforeUnmount(() => { if (throttleTimer) clearTimeout(throttleTimer); unbindGe
               <g v-for="hd in boxHandles(a.coords)" :key="hd.h" :data-handle="hd.h" class="handle">
                 <rect :x="X(hd.x) - hitHalf" :y="Y(hd.y) - hitHalf" :width="hitHalf * 2" :height="hitHalf * 2"
                   fill="transparent" />
-                <rect :x="X(hd.x) - visHalf" :y="Y(hd.y) - visHalf" :width="visHalf * 2" :height="visHalf * 2"
-                  class="handle__vis" />
+                <rect
+                  :x="X(hd.x) - (isHot(a.localId, hd.h) ? hotHalf : visHalf)"
+                  :y="Y(hd.y) - (isHot(a.localId, hd.h) ? hotHalf : visHalf)"
+                  :width="(isHot(a.localId, hd.h) ? hotHalf : visHalf) * 2"
+                  :height="(isHot(a.localId, hd.h) ? hotHalf : visHalf) * 2"
+                  class="handle__vis" :class="{ 'is-hot': isHot(a.localId, hd.h) }"
+                />
               </g>
             </template>
           </template>
@@ -434,7 +473,11 @@ onBeforeUnmount(() => { if (throttleTimer) clearTimeout(throttleTimer); unbindGe
             <template v-if="vertexEditId === a.localId">
               <g v-for="(_, vi) in (a.coords.length / 2)" :key="vi" :data-handle="vi" class="handle">
                 <circle :cx="X(a.coords[vi * 2])" :cy="Y(a.coords[vi * 2 + 1])" :r="hitHalf" fill="transparent" />
-                <circle :cx="X(a.coords[vi * 2])" :cy="Y(a.coords[vi * 2 + 1])" :r="visHalf" class="handle__vis" />
+                <circle
+                  :cx="X(a.coords[vi * 2])" :cy="Y(a.coords[vi * 2 + 1])"
+                  :r="isHot(a.localId, vi) ? hotHalf : visHalf"
+                  class="handle__vis" :class="{ 'is-hot': isHot(a.localId, vi) }"
+                />
               </g>
             </template>
           </template>
@@ -492,6 +535,8 @@ onBeforeUnmount(() => { if (throttleTimer) clearTimeout(throttleTimer); unbindGe
 .ann__label { font-size: 11px; font-family: var(--font-mono); font-variant-numeric: tabular-nums; pointer-events: none; }
 .handle { cursor: nwse-resize; }
 .handle__vis { fill: var(--accent); stroke: #0d0f12; stroke-width: 1; pointer-events: none; }
+/* rev4「拖错可即时察觉」：胜出句柄在 hover 时就放大描边，指针进入重叠区即可看出将拖哪条边 */
+.handle__vis.is-hot { fill: var(--accent-hover); stroke: var(--bg-base); stroke-width: 1.5; }
 .draft { pointer-events: none; }
 .cursor-line { pointer-events: none; opacity: .8; }
 .stage__readout { font-family: var(--font-mono); font-variant-numeric: tabular-nums; font-size: 11px; fill: var(--text-primary); paint-order: stroke; stroke: #0d0f12; stroke-width: 3; pointer-events: none; }

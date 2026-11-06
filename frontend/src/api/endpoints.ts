@@ -8,6 +8,7 @@ import type {
   HealthResp, WorkspaceRow, DatasetRow, VersionRow, LabelDef, ItemRow,
   StatsResp, ProgressResp, ScanResp, ThumbsResp, TaskRow, AnnRow,
   CollectResp, FrameMeta, PreAnnotateResp,
+  CleanPreviewResp, CleanRollbackResp, DroppedRow,
 } from './types'
 
 // ---- 5.1 元信息 ----
@@ -97,6 +98,14 @@ export const runCleanApply = (version: string, specs: unknown[], uris: string[],
   calibration: unknown = null, write_transformed = false, author = '', signal?: AbortSignal) =>
   postLong<Record<string, unknown>>('/clean/apply',
     { version, specs, uris, calibration, write_transformed, author }, signal)
+/** 预览与执行同一条 evaluate()（契约 §5.7）；条目多时走 POST，避免查询串过长。 */
+export const cleanPreview = (uris: string[], specs: unknown[], calibration = '', signal?: AbortSignal) =>
+  post<CleanPreviewResp>('/clean/preview', { uris, specs, calibration }, { signal })
+/** version 必填（契约 §5.7：回退目标是哪个清洗版本，不吃当前上下文默认） */
+export const cleanRollback = (version: string, signal?: AbortSignal) =>
+  postLong<CleanRollbackResp>('/clean/rollback', { version }, signal)
+export const cleanDropped = (version: string) =>
+  get<{ dropped: DroppedRow[] }>('/clean/dropped', { version })
 export const runAugment = (version: string, recipe: Record<string, unknown>,
   uris: string[], author = '', signal?: AbortSignal) =>
   postLong<Record<string, unknown>>('/augment/run', { version, recipe, uris, author }, signal)

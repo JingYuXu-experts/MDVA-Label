@@ -164,3 +164,69 @@ export interface PreAnnotateResp {
   carried?: number
   task_id?: string
 }
+
+// ---- 5.7 清洗（预览与执行同一条 evaluate()）----
+
+/** 算子参数元数据：界面参数面板完全由它驱动，不写死算子表 */
+export interface OpParamSpec {
+  type: string
+  default?: unknown
+  min?: number
+  max?: number
+  enum?: string[]
+  description?: string
+}
+export interface CleanOpMeta {
+  name: string
+  description: string
+  schema: Record<string, OpParamSpec>
+}
+export interface DroppedRow {
+  uri: string
+  op: string
+  reason?: string
+  score?: number | null
+}
+export interface PerOpStat { n: number; dropped: number; transformed: number }
+/**
+ * 预览响应 = Result.summary()。
+ * 注意：契约 v1.3 的 summary 只有条数，不含命中清单——dropped/transforms 两键是
+ * 为「预览态列命中条目」预留的可选字段，后端补上即自动生效，前端不依赖其存在。
+ */
+export interface CleanPreviewResp {
+  n_items: number
+  n_kept: number
+  n_dropped: number
+  n_transforms: number
+  per_op: Record<string, PerOpStat>
+  groups: number
+  dropped?: DroppedRow[]
+  transforms?: { uri: string; op: string; params: Record<string, unknown> }[]
+}
+/** apply 响应带 version_id（§7：新版本 id 供回退/谱系绑定），原件不动 */
+export interface CleanApplyResp {
+  version?: string
+  version_id?: string
+  parent?: string
+  summary?: CleanPreviewResp
+  dropped?: DroppedRow[]
+  kept?: string[]
+  written?: Record<string, unknown>[]
+  n_inherited?: number
+  transformed?: number
+  task_id?: string
+  out_dir?: string
+  error?: string
+  detail?: string
+}
+export interface CleanRollbackResp {
+  undid: string
+  restored: string | null
+  new_version: string | null
+  op: string
+  removed_files: string[]
+  skipped_files: { written: string; why: string }[]
+  annotations_kept: number
+  error?: string
+  detail?: string
+}
