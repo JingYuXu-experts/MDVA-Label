@@ -27,6 +27,8 @@ export const useBackendsStore = defineStore('backends', () => {
   const backends = ref<BackendRow[]>([])
   const loading = ref(false)
   const loadError = ref('')
+  /** rev13 §5.6：「探测请求失败」与「取不到档位」是两件事，不得共用一句文案互冒充 */
+  const probeError = ref('')
   const domain = ref('')
   const task = ref('')
   const modality = ref('')
@@ -79,9 +81,13 @@ export const useBackendsStore = defineStore('backends', () => {
   async function loadCatalog(): Promise<void> {
     loading.value = true
     loadError.value = ''
+    probeError.value = ''
     try {
       const [p, list] = await Promise.all([
-        api.getProbe().catch(() => null),
+        api.getProbe().catch((err) => {
+          probeError.value = err instanceof Error ? err.message : String(err)
+          return null
+        }),
         api.getBackends('', '', ''),
       ])
       probe.value = p
@@ -180,7 +186,7 @@ export const useBackendsStore = defineStore('backends', () => {
   }
 
   return {
-    probe, all, backends, loading, loadError, domain, task, modality, chosen,
+    probe, all, backends, loading, loadError, probeError, domain, task, modality, chosen,
     recommended, hasTable, recommendNote, benchRows, gate, threshold,
     benching, benchError, benchTablePath,
     domainOpts, taskOpts, modalityOpts, chosenRow, nAvailable, gateMeasured,

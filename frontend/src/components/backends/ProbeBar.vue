@@ -23,8 +23,11 @@ const cells = computed(() => {
 
 <template>
   <div class="probep" data-testid="probe-bar">
-    <span v-if="tierLabel" class="probep__tier num" data-tier="1">{{ tierLabel }}</span>
-    <span v-else class="probep__tier probep__tier--unknown num">档位未知</span>
+    <p v-if="store.probeError" class="probep__err" role="alert" data-probe="failed">
+      能力探测失败：{{ store.probeError }}
+    </p>
+    <span v-else-if="tierLabel" class="probep__tier num" data-probe="ok">{{ tierLabel }}</span>
+    <span v-else class="probep__tier probep__tier--unknown num" data-probe="unknown">档位未知</span>
     <div v-for="c in cells" :key="c.key" class="probep__cell">
       <component :is="c.icon" :size="13" class="probep__icon" aria-hidden="true" />
       <span class="probep__k">{{ c.key }}</span>
@@ -50,6 +53,11 @@ const cells = computed(() => {
   color: var(--accent); font-weight: 600; letter-spacing: .04em;
 }
 .probep__tier--unknown { border-color: var(--border-strong); color: var(--text-secondary); }
+/* 探测请求本身失败＝失败态（danger + 后端原文），不得降级成"档位未知"那句 neutral */
+.probep__err {
+  margin: 0; font-size: var(--fs-xs); color: var(--danger);
+  font-variant-numeric: tabular-nums; word-break: break-all;
+}
 .probep__cell { display: flex; align-items: baseline; gap: 6px; }
 .probep__icon { color: var(--text-muted); align-self: center; }
 .probep__k { color: var(--text-muted); }
