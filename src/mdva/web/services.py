@@ -847,7 +847,11 @@ class Hub:
     def augment_check(self, uris: Sequence, recipe: dict, category: str = "") -> dict:
         from .. import augment as AUG
 
-        items = [MDIO.load_any(self.store.to_abs(u)) for u in uris]
+        # REQ-W12：与 REQ-W10 同法，逐条改走 load_item 的 LRU。之前每次配方改动都经
+        # MDIO.load_any 全量重开文件——实测 7 条目冷 6098ms/热 6081ms，同参数第二次
+        # 没变快。AUG.check 只读 items 的模态与算子覆盖，不原地改数组，缓存对象可
+        # 安全共享；错误形态不变（load_item 异常路径不缓存、原样上抛，路由 400 口径不动）。
+        items = [self.load_item(u) for u in uris]
         return {"warnings": AUG.check(AUG.Recipe.from_obj(recipe), items, category=category)}
 
     def augment_run(self, version_id: str, recipe: dict, uris: Sequence = (),
