@@ -101,7 +101,10 @@ class ApiHandler(BaseHTTPRequestHandler):
         self._handle("PATCH")
 
     def do_OPTIONS(self) -> None:
-        # 只服务本机界面：允许任何来源，等于给"从别的端口开的前端页面"留条路
+        # REQ-W27：预检响应**故意不给** Access-Control-Allow-Origin ⇒ 任何跨源页面的预检
+        # 都在浏览器侧失败，这条 204 只对同源工具链有意义（`test_web.py` 断言它回 204 而不是
+        # stdlib 的 501 HTML）。开发期"另一个端口的页面"不需要这里放行：vite dev server
+        # 已经把 /api 代理到本服务（frontend/vite.config.ts），页面看到的是同源相对路径。
         self._send(204, {"Access-Control-Allow-Methods": "GET, POST, OPTIONS",
                          "Access-Control-Allow-Headers": "Content-Type"}, b"")
 
@@ -131,8 +134,13 @@ class ApiHandler(BaseHTTPRequestHandler):
             return
         query = dict(parse_qsl(parsed.query, keep_blank_values=True))
         response = routes.call(self.workspaces, method, parsed.path, query, body)
+        # REQ-W27：这里原来是 `self.headers.get("Origin") or "*"`，也就是**反射请求来源**。
+        # 只绑 127.0.0.1 挡住的"非本机来源"，被这一行放开了第二道门：浏览器同源策略
+        # 本来也拦住"用户打开的网页"这条路，反射 ACAO 等于给它发通行证 ⇒ 服务在跑的
+        # 那段时间里，用户浏览器里任意一个网页都能读走 /api/scan、/api/thumbs 的响应体。
+        # 界面与接口同源（静态产物就在这个进程里发，开发期由 vite proxy 转发 /api），
+        # 所以同源请求一个字节都不受影响；跨源一律不给许可，也不做"默认打开的开关"。
         heads = {"Cache-Control": API_CACHE,
-                 "Access-Control-Allow-Origin": self.headers.get("Origin") or "*",
                  "Content-Type": response.content_type, **response.headers}
         if response.data is not None:
             heads["Cache-Control"] = FRAME_CACHE if parsed.path.endswith("/frame") \

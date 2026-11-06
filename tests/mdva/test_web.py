@@ -13,6 +13,7 @@ from urllib.parse import quote
 
 import numpy as np
 import pytest
+from PIL import Image
 
 from mdva import io, synth
 from mdva.web import routes
@@ -94,9 +95,12 @@ def test_unknown_path_and_wrong_method(stack):
     assert call(ws, "GET", "/health").status == 404             # 忘了 /api 前缀也不给接口
 
 
-def test_errors_carry_a_readable_message(stack, tmp_path):
+def test_errors_carry_a_readable_message(stack):
     ws, data, root, did, vid = stack
-    ghost = tmp_path / "根本不存在.fits"
+    # 这条测的是"不存在 → 404 + 看得懂的原文"，所以路径必须摆在工作区之内；
+    # "存在但在允许根之外"是另一件事（REQ-W27 的 containment），由
+    # test_live_refuses_traversal_payloads 用真实存在的越界文件单独测。
+    ghost = root / "根本不存在.fits"
     bad = call(ws, "GET", "/api/frame", {"uri": str(ghost)})
     assert bad.status == 404 and ghost.name in bad.json_body["error"]
     missing = call(ws, "POST", "/api/annotations", None, {"version": vid})
@@ -198,10 +202,16 @@ def test_labels_replace_needs_a_full_table(stack):
     post(ws, "/labels", {"dataset": did, "labels": ["耀斑区", "宇宙线"]})   # 还原给后面的用例
 
 
-def test_dataset_type_is_validated(stack, tmp_path):
+def test_dataset_type_is_validated(stack):
     ws = stack[0]
+    # REQ-W27 夹具坐标：`root` 原本随手用 tmp_path，而 tmp_path 对服务态是允许根之外，
+    # 请求边界会先按越界拒掉 ⇒ 类型校验这条就测不到了。搬进工作区，断言意图一字未改
+    # （非法 type ⇒ 400 且原文点到类型）；越界本身由 test_web_containment.py 用
+    # 真实存在的工作区外目录单独测，不在这里充数。
+    inside = stack[2] / "坏类型夹具"
+    inside.mkdir(exist_ok=True)
     res = call(ws, "POST", "/api/datasets", None, {"name": "坏类型", "type": "nope",
-                                                   "root": str(tmp_path)})
+                                                   "root": str(inside)})
     assert res.status == 400 and "未知数据集类型" in res.json_body["error"]
 
 
@@ -323,7 +333,9 @@ def test_backend_catalog_gate_and_recommend(stack):
 def test_clean_preview_apply_dropped_rollback(stack, tmp_path):
     ws, data, root, did, vid = stack
     scene = str(data / "image_field.fits")
-    dup = tmp_path / "副本.fits"
+    # REQ-W27 夹具：dup 必须在允许根之内，否则请求边界先按越界拒（这条测的是 dedup
+    # 命中与回滚，不是 containment）
+    dup = root / "副本.fits"
     dup.write_bytes(Path(scene).read_bytes())
     specs = [{"name": "dedup"}]
     pv = post(ws, "/clean/preview", {"uris": [scene, str(dup)], "specs": specs})
@@ -331,7 +343,8 @@ def test_clean_preview_apply_dropped_rollback(stack, tmp_path):
     # REQ-W09（M4-A 裁决）：预览阶段就有逐条命中清单，uri 为 API 同口径
     hit = pv["dropped"][0]
     assert hit["op"] == "dedup"
-    assert hit["uri"] in {(data / "image_field.fits").relative_to(root).as_posix(), str(dup)}
+    assert hit["uri"] in {(data / "image_field.fits").relative_to(root).as_posix(),
+                          dup.name}          # dup 现在在工作区内 ⇒ 出站是相对口径
     applied = post(ws, "/clean/apply", {"version": vid, "uris": [scene, str(dup)],
                                         "specs": specs})
     assert applied["summary"]["n_kept"] == 1
@@ -384,10 +397,12 @@ def test_export_validate_and_report(stack):
 
 def test_collect_copy_and_undo(stack, tmp_path):
     ws, data, root, did, vid = stack
-    target = tmp_path / "收录到这里"
+    target = root / "收录到这里"      # REQ-W27 夹具：收录目的地必须在允许根之内
     got = post(ws, "/collect", {"uris": [str(data / "image_field.fits")],
                                 "target": str(target), "mode": "copy"})
-    assert got["n_entries"] == 1 and Path(got["manifest"]).is_file()
+    # 出站清单路径按接口约定是**相对工作区**的（D3 口径）：target 搬进工作区之后
+    # `_rel` 就会给相对形式，所以这里按 base 拼回去再验文件真的落盘（断言意图不变）。
+    assert got["n_entries"] == 1 and (root / got["manifest"]).is_file()
     assert list(target.rglob("*.fits"))
     assert get(ws, "/collect/latest", target=str(target))["exists"] is True
     assert post(ws, "/collect/undo", {"manifest": got["manifest"]})["removed"] >= 1
@@ -515,6 +530,18 @@ def test_live_serves_frontend_and_refuses_traversal(live):
     assert status == 405                                        # 静态目录不可写
     status, heads, _ = http("OPTIONS", live.port, "/api/annotations")
     assert status == 204 and "POST" in heads["Access-Control-Allow-Methods"]
+    # REQ-W27 补：这条用例的名字一直承诺 "refuses_traversal"，但此前只测了 URL 路径面
+    # （上面那行 `/../secret.txt`），`uri=` 参数面一条断言都没有——PM 把这种形态登记为
+    # 假覆盖（⑤第三变体的测试层实物）。下面三行把名字承诺兑现到参数面上：
+    # 用**真实存在、可被解码、但在工作区之外**的 PNG 当靶（②-c：ghost 证明文件不算越界）。
+    outside = live.static.parent / "DO-NOT-LEAK.png"
+    Image.new("RGB", (16, 12), (7, 130, 45)).save(outside, "PNG")
+    for probe in (quote(str(outside)), quote("../DO-NOT-LEAK.png"), "..%2FDO-NOT-LEAK.png"):
+        status, _, raw = http("GET", live.port,
+                              "/api/frame?uri=" + probe + "&width=64&height=64")
+        assert status == 400, (probe, status, raw[:120])
+        assert b"\x89PNG" not in raw                             # 一张图都没出去
+        assert "越界" in json.loads(raw.decode("utf-8"))["error"]
 
 
 def test_live_other_methods_get_405_json(live):

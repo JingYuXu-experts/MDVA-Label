@@ -149,6 +149,13 @@ class Params:
             raise Bad(f"参数 {key} 要的是对象，收到 {type(value).__name__}")
         return dict(value)
 
+    def rewrite(self, key: str, value) -> None:
+        """把收口归一后的值写回原处（请求体优先，与 `raw()` 的取用顺序一致）。"""
+        if key in self._b:
+            self._b[key] = value
+        else:
+            self._q[key] = value
+
     def pair(self, key: str, default: tuple = DEFAULT_CELL) -> tuple:
         """缩略图边长一类的成对参数：`196x122`、`[196,122]`、`196,122` 都认。"""
         value = self.raw(key, None)
@@ -744,6 +751,36 @@ def paths() -> list[dict]:
             for r in ordered]
 
 
+#: 请求里带磁盘路径的键——数据分析 seq=751 那张"键 × 收口点"表的落点版。
+#: `uri/uris/target/dir/manifest/calibration` 本来就会走进 `store.to_abs`；
+#: `root`（scan/bench/datasets）与 `out_dir`（export）**根本不进 to_abs**，
+#: 所以收口必须做在这一层（请求边界），而不是往每个方法里补检查——PM seq=752 裁定 2：
+#: 边界落在攻击者唯一进得来的那个面上，CLI/建包脚本（=启动参数的主人）不受影响。
+PATH_KEYS = ("uri", "uris", "root", "target", "out_dir", "dir", "manifest", "calibration")
+
+
+def guard_paths(p: "Params", hub) -> None:
+    """在任何遍历 / open / 落盘之前，把路径参数校到允许根之内并归一（REQ-W27）。
+
+    两件事一起做，缺一件都不算收口：
+    1. **校**：越界 ⇒ `OutsideWorkspace`（路由层 400，原文点到被拒的那个值，不回显服务端路径）。
+       它发生在 handler 之前，所以 `scan?root=C:\\Windows` 不会再走一遍系统盘（W27-6），
+       也不会再冒出 `[Errno 13] Permission denied` + 系统路径那种答非所问（W27-7）。
+    2. **归一**：相对的按工作区 base 算、绝对的解析干净，再交回 handler。
+       只校不改的话，`.` 这类值仍会在 handler 里被解析成服务进程的 cwd（W27-3 追加项）——
+       边界判对了、行为却走偏，是"键存在 ≠ 收口命中"的另一种形态。
+    """
+    store = hub.store
+    for key in PATH_KEYS:
+        if not p.has(key):
+            continue
+        value = p.raw(key)
+        if isinstance(value, (list, tuple)):
+            p.rewrite(key, [str(store.require_within(v)) for v in value if str(v or "").strip()])
+        elif str(value or "").strip():
+            p.rewrite(key, str(store.require_within(value)))
+
+
 def status_for(exc: Exception) -> int:
     """异常 -> HTTP 状态码：越权 403、找不到 404、参数不对 400，其余 500。"""
     from ..annotate.state import PermissionDenied
@@ -784,6 +821,7 @@ def call(workspaces: Workspaces, method: str, path: str,
                                         f"收到 {method}"}, 405)
         return Response.of({"error": f"未知接口 {key[1]}"}, 404)
     try:
+        guard_paths(p, hub)
         return Response.of(found.handler(Ctx(workspaces, hub, p, p.text("ws"))))
     except Exception as exc:      # noqa: BLE001 - 接口不能把异常原样抛给浏览器
         status = status_for(exc)
