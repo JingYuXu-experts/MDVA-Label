@@ -3,7 +3,6 @@
 # 这一层刻意不含任何 GUI 包：核心引擎要能在无显示器的服务器上跑批处理。
 # 按需分层的其余清单：
 #   requirements/science.txt  FITS/Parquet/HDF5/CLAHE/IsolationForest 等科研格式与算子
-#   requirements/gui.txt      旧 wxPython 图形界面
 #   requirements/dev.txt      pytest 与 pre-commit
 # 一起装：pip install -r requirements.txt -r requirements/science.txt -r requirements/dev.txt
 #

@@ -1,0 +1,13 @@
+[Desktop Entry]
+Encoding = UTF-8
+Name = MDVA
+GenericName = MDVA
+GenericName[zh_CN] = 本地化多模态智能标注平台
+Type = Application
+Icon = mdva
+Exec = python -m mdva serve
+Terminal = false
+Categories = Graphics;2DGraphics;Development;Editor;
+# 原 MimeType 打开关联属于上游图片查看器语义；本平台是本地 Web 服务（serve 只绑
+# 127.0.0.1），不接文件参数，故移除“用系统图片类型打开”的关联。自有图标资产与
+# 文件关联若有需求，随路线图另行设计。

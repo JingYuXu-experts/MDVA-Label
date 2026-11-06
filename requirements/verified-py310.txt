@@ -20,9 +20,3 @@ tifffile==2025.5.10
 pyyaml==6.0.3
 requests==2.33.1
 pytest==9.1.1
-
-# 以下包在 mdva 环境里未安装（属于 requirements/gui.txt，只有跑旧界面才需要）：
-#   wxpython
-#   piexif
-#   reportlab
-#   ffmpeg-python

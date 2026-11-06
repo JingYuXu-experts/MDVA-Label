@@ -1,20 +1,20 @@
 # Changelog
 
-All notable changes to this project will be documented in this file.
+MDVA 自有版本线，起始于 2026-11-06（此前内容与本版本线无关，已归零重启）。
+遵循 Keep a Changelog 形式与语义化版本。
 
-The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
-and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+## v0.1.0 (2026-11-06)
 
-## [Unreleased]
+### 平台
+- 六层本地引擎：多模态接入（图像/立方体/遥测时序/事件/视频）、渲染、分析算子、
+  标注状态机、清洗、增强（seed 谱系可逐字节重放）、导出（COCO/YOLO/VOC/多模态 JSON）。
+- 本地 Web 标注平台：只绑 127.0.0.1，完全离线，数据不出机器；六视图
+  （管理台/标注画布/清洗/增强/导出/后端算法）。
+- CLI `mdva`：datasets / scan / render / analyze / clean / augment / export / bench / serve。
 
-## 3.9.7
+### 质量与验证
+- 全量测试 633 通过 / 18 跳过；后端实测表 out/bench/backends.json 入库。
+- 交互时延留证：清洗预览与增强告警检查热态 0ms 量级（LRU 按文件指纹失效）。
 
-Support/Optimize/Fix bugs
-
-- Support: manually change the color of the box [issues35](https://github.com/nachifur/MulimgViewer/issues/35)
-- Support: display boxes with different line widths on the zoomed image and the
-  original image [issues39](https://github.com/nachifur/MulimgViewer/issues/39)
-- Support: detects the version and prompts to update the software [issues41](https://github.com/nachifur/MulimgViewer/issues/41)
-- Support: hide the top and right toolbars by Ctrl+H [issues42](https://github.com/nachifur/MulimgViewer/issues/42)
-- Optimize: the GUI layout
-- Fix bug: show RGBA
+### 仓库
+- uri 相对工作区根统一（旧库自动迁移）；发布元数据与版本线归零重启。

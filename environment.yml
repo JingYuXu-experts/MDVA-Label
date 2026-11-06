@@ -5,9 +5,6 @@
 #   conda activate mdva
 #   PYTHONPATH=src python -m pytest tests -q        # Windows PowerShell: $env:PYTHONPATH="src"
 #
-# 旧 wxPython 图形界面不在本环境里，需要时叠加：
-#   pip install -r requirements/gui.txt
-#
 # conda 只负责 Python 解释器，其余一律走 pip：混用 conda 和 pip 装同一个
 # 带 C 扩展的包会出现两份安装互相遮蔽，出问题极难定位。
 # 已验证过的精确版本见 requirements/verified-py310.txt。

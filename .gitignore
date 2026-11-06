@@ -5,13 +5,14 @@ __pycache__/
 .eggs/
 build/
 dist/
+sdist/
 .pytest_cache/
 .coverage
 htmlcov/
 
-# setuptools_scm / setuptools-generate 生成物
-src/mulimgviewer/_version.py
-src/mulimgviewer/_metainfo.py
+# setuptools_scm 生成物（当前配置未写 write_to，这两条只兜底未来生成，不带具体包路径）
+*_version.py
+*_metainfo.py
 
 # 运行产物（out/bench/backends.json 是随仓库分发的实测表，例外保留）
 out/*
