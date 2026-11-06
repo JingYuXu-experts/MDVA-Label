@@ -100,6 +100,18 @@ def test_new_version_carries_annotations(hub_ws):
 
 # ---------------------------------------------------------------------- 浏览与渲染
 
+def test_scan_without_series_returns_json_safe_null_span(tmp_path, hub_ws):
+    """M1 联调报的缺陷：无时序目录的 common_span 是 (-inf, inf) 哨兵，Infinity 不是
+    合法 JSON，前端 response.json() 会直接解析失败——对 API 必须出 null。"""
+    hub = hub_ws[0]
+    p = tmp_path / "img"
+    p.mkdir()
+    Image.fromarray(np.zeros((64, 64), np.uint8)).save(p / "x.png")
+    report = hub.scan(p)
+    assert report["t_span"] is None
+    json.dumps(report, allow_nan=False)          # 旧行为在这里抛 ValueError
+
+
 def test_scan_reports_every_modality(hub_ws):
     hub, data, root, did, vid = hub_ws
     report = hub.scan(data)

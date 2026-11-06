@@ -332,8 +332,11 @@ class Hub:
         for item in items:
             counts[item.modality] = counts.get(item.modality, 0) + 1
         span = MDIO.common_span(items)
+        # 无时序项时 common_span 返回 (-inf, +inf) 哨兵——Infinity 不是合法 JSON
+        # （前端 response.json() 直接解析失败），对 API 一律以 null 表达"无时间跨度"
+        finite = span[0] is not None and math.isfinite(span[0]) and math.isfinite(span[1])
         return {"root": str(Path(root).resolve()), "n_items": len(items),
-                "modalities": counts, "t_span": list(span) if span[0] is not None else None,
+                "modalities": counts, "t_span": list(span) if finite else None,
                 "elapsed_ms": round((time.perf_counter() - t0) * 1000.0, 1),
                 "items": [self._item_row(i) for i in items[:200]]}
 
