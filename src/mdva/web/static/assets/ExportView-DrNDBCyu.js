@@ -1,1 +1,0 @@
-import{d as e,a as t,f as o,o as a,A as s,_ as c}from"./index-_i79Omzm.js";const _={class:"placeholder"},r=e({__name:"ExportView",setup(p){return(n,d)=>(a(),t("div",_,[o(s,{text:"导出视图开发中（里程碑 M4）。"})]))}}),i=c(r,[["__scopeId","data-v-073efdbe"]]);export{i as default};
