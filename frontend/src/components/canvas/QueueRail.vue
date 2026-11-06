@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, ref, type Component } from 'vue'
+import { Image as IconImage, Activity, Layers, Zap, Film } from 'lucide-vue-next'
 import { useItemsStore, bucketOf } from '@/stores/items'
 import { useCanvasStore } from '@/stores/canvas'
 import { useCtxStore } from '@/stores/ctx'
@@ -24,11 +25,31 @@ const BUCKET_COLOR: Record<string, string> = {
   unlabeled: 'var(--text-muted)', draft: 'var(--warning)',
   submitted: 'var(--accent)', approved: 'var(--success)',
 }
+const BUCKET_CN: Record<string, string> = {
+  unlabeled: '未标注', draft: '草稿', submitted: '已提交', approved: '已批准',
+}
+
+// 模态图标（UI规格 v1.4 rev1 审查项③，图标名按规格点单）：image/series/cube/event/video
+const MOD_ICON: Record<string, Component> = {
+  image: IconImage, cube: Layers, video: Film, series: Activity, event: Zap,
+}
+const MOD_CN: Record<string, string> = {
+  image: '图像', cube: '立方体', video: '视频', series: '时序', event: '事件',
+}
+
+function iconOf(modality: string): Component | null {
+  return MOD_ICON[String(modality || '')] || null
+}
 
 function dotColor(uri: string): string {
   const it = items.items.find((x) => x.uri === uri)
   if (!it) return 'var(--text-muted)'
   return BUCKET_COLOR[bucketOf(it)] || 'var(--text-muted)'
+}
+
+function stateTitle(uri: string): string {
+  const it = items.items.find((x) => x.uri === uri)
+  return it ? BUCKET_CN[bucketOf(it)] || '未标注' : '未知状态'
 }
 
 function shortName(name: string): string {
@@ -65,10 +86,12 @@ loadHard()
       :class="{ 'is-cur': it.uri === store.currentUri }"
       role="option"
       :aria-selected="it.uri === store.currentUri"
+      :aria-label="`${it.name}（${MOD_CN[it.modality] || it.modality || '未知'} · ${stateTitle(it.uri)}）`"
       :title="it.uri"
       @click="emit('pick', it.uri)"
     >
-      <span class="rail__glyph">{{ shortName(it.name) }}</span>
+      <component :is="iconOf(it.modality)" v-if="iconOf(it.modality)" class="rail__icon" :size="14" />
+      <span v-else class="rail__glyph">{{ shortName(it.name) }}</span>
       <span class="rail__state" :style="{ background: dotColor(it.uri) }" />
       <span v-if="hardUris.has(it.uri)" class="rail__hard" aria-label="难例" />
     </button>
@@ -82,6 +105,8 @@ loadHard()
 .rail__filter.is-on { color: var(--accent); border-color: var(--accent); }
 .rail__dot { position: relative; width: 26px; height: 26px; border-radius: 3px; border: 1px solid var(--border); background: var(--bg-raised); cursor: pointer; display: flex; align-items: center; justify-content: center; }
 .rail__dot.is-cur { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+.rail__icon { color: var(--text-secondary); flex: none; }
+.rail__dot.is-cur .rail__icon { color: var(--accent); }
 .rail__glyph { font-size: 10px; color: var(--text-secondary); font-family: var(--font-mono); }
 .rail__state { position: absolute; right: 2px; bottom: 2px; width: 6px; height: 6px; border-radius: 50%; }
 .rail__hard { position: absolute; left: 2px; top: 2px; width: 6px; height: 6px; border-radius: 50%; background: var(--danger); }

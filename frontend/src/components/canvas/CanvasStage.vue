@@ -34,12 +34,22 @@ function scheduleFrame(): void {
   }, 120)
 }
 watch(() => [store.currentUri, store.frameParams, store.frameW, store.frameH], scheduleFrame, { deep: true })
-watch(displaySrc, () => { /* img onload 清 loadingFrame */ })
 function onImgLoad(): void { store.loadingFrame = false }
 function onImgError(): void { store.loadingFrame = false; toast.warning('帧渲染失败，可调整参数或稍后重试') }
 
-// ---- 坐标映射：屏幕 → 帧像素 ----
-function toFrame(evt: MouseEvent): { x: number; y: number } {
+// ---- fit 映射（BUG-008）：Ann 坐标 = native 图像像素，出图画布含 letterbox ----
+// 叠加层与帧 <img> 共用这一条换算；越界几何照常绘制、不裁剪不改写（UI规格 v1.4 §5.2）。
+const fs = computed(() => (store.fit && store.fit.scale > 0 ? store.fit.scale : 1))
+const fox = computed(() => (store.fit ? store.fit.x0 : 0))
+const foy = computed(() => (store.fit ? store.fit.y0 : 0))
+const X = (n: number): number => fox.value + n * fs.value
+const Y = (n: number): number => foy.value + n * fs.value
+const L = (n: number): number => n * fs.value
+/** 画布上的点标半径：屏幕像素恒定，不随 fit/zoom 变形 */
+const marker = (px: number): number => px / store.zoom
+
+// ---- 坐标采集：屏幕 → 画布 px → native 图像 px ----
+function toCanvas(evt: MouseEvent): { x: number; y: number } {
   const svg = svgEl.value!
   const pt = svg.createSVGPoint()
   pt.x = evt.clientX; pt.y = evt.clientY
@@ -48,16 +58,32 @@ function toFrame(evt: MouseEvent): { x: number; y: number } {
   const p = pt.matrixTransform(m.inverse())
   return { x: p.x, y: p.y }
 }
+/** 落笔唯一入口：画布 px 逆 fit 变换成 native，存进 Ann.coords 的一律是图像像素 */
+function toNative(evt: MouseEvent): { x: number; y: number } {
+  const c = toCanvas(evt)
+  return { x: (c.x - fox.value) / fs.value, y: (c.y - foy.value) / fs.value }
+}
+
+// ---- 时间 ↔ 画布 x：series 用 plot_box，其余用 fit 内容区（letterbox 不参与映射）----
+function bandRange(): [number, number] {
+  const pb = store.plotBox
+  if (pb && pb.length >= 4) return [pb[0], pb[2]]
+  const r = store.contentRect
+  return [r.x, r.x + r.w]
+}
 function xToTime(x: number): number {
   const { t0, t1 } = store.timeSpan
-  return t0 + Math.max(0, Math.min(1, x / store.frameW)) * (t1 - t0)
+  const [bx0, bx1] = bandRange()
+  const frac = Math.max(0, Math.min(1, (x - bx0) / (bx1 - bx0 || 1)))
+  return t0 + frac * (t1 - t0)
 }
 function timeToX(t: number): number {
   const { t0, t1 } = store.timeSpan
-  return ((t - t0) / (t1 - t0 || 1)) * store.frameW
+  const [bx0, bx1] = bandRange()
+  return bx0 + ((t - t0) / (t1 - t0 || 1)) * (bx1 - bx0)
 }
 
-// ---- 绘制草稿态 ----
+// ---- 绘制草稿态（native 像素）----
 type Draft =
   | { kind: 'box'; x1: number; y1: number; x2: number; y2: number }
   | { kind: 'interval'; a: number; b: number }
@@ -67,10 +93,23 @@ const draft = ref<Draft>(null)
 const polyBuf = ref<{ x: number; y: number }[]>([])
 
 // ---- 拖拽移动 / 缩放 / 顶点 ----
-let dragLocalId: number | null = null
+const dragLocalId = ref<number | null>(null)
 let dragHandle = -1 // box: 0-7 控制点, -1=整体; poly: 顶点 index
 let dragStart = { x: 0, y: 0 }
+let dragStartCn = { x: 0, y: 0 }
 let dragOrig: number[] = []
+
+// poly 顶点编辑会话（v1.4 句柄验收③：双击进入，Enter 提交、Esc 回退本次编辑）
+const vertexEditId = ref<number | null>(null)
+let vertexEntry: number[] = []
+
+// 拖拽实时读数（v1.4：拖拽中跟随光标的 mono 坐标读数）
+const readout = ref('')
+const readPos = ref({ x: 0, y: 0 })
+
+// 句柄尺寸按屏幕像素恒定：视觉 8px 见方、命中层 12px 见方，不随 zoom 缩放（v1.4 rev1）
+const hitHalf = computed(() => 6 / store.zoom)
+const visHalf = computed(() => 4 / store.zoom)
 
 function geomAllowed(g: Geom): boolean {
   if (g === 'interval' || g === 'level') return store.isTimeModality
@@ -79,26 +118,34 @@ function geomAllowed(g: Geom): boolean {
 
 function onDown(evt: MouseEvent): void {
   if (!store.currentUri) return
-  const p = toFrame(evt)
+  const cn = toCanvas(evt)
+  const p = toNative(evt)
   if (store.mode === 'select') {
     const g = (evt.target as Element).closest('g.ann')
     const handle = (evt.target as Element).closest('[data-handle]')
     if (handle) {
       const id = Number(handle.closest('g.ann')?.getAttribute('data-id'))
-      dragLocalId = id; dragHandle = Number(handle.getAttribute('data-handle'))
-      dragStart = p; dragOrig = [...(store.draftAnns.find((a) => a.localId === id)?.coords || [])]
+      const a = store.draftAnns.find((x) => x.localId === id)
+      if (!a || a.state === 'approved') return
+      dragLocalId.value = id; dragHandle = Number(handle.getAttribute('data-handle'))
+      dragStart = p; dragStartCn = cn; dragOrig = [...a.coords]
       return
     }
     if (g) {
       const id = Number(g.getAttribute('data-id'))
+      if (id !== vertexEditId.value) leaveVertexSession(true)
       store.select(id)
       const a = store.draftAnns.find((x) => x.localId === id)
-      if (a && a.state !== 'approved') { dragLocalId = id; dragHandle = -1; dragStart = p; dragOrig = [...a.coords] }
+      if (a && a.state !== 'approved') {
+        dragLocalId.value = id; dragHandle = -1; dragStart = p; dragStartCn = cn; dragOrig = [...a.coords]
+      }
       return
     }
+    leaveVertexSession(true)
     store.select(null)
     return
   }
+  leaveVertexSession(true)
   if (store.mode === 'point') {
     store.addAnn({ geom: 'point', coords: [Math.round(p.x), Math.round(p.y)] })
     return
@@ -111,23 +158,24 @@ function onDown(evt: MouseEvent): void {
   if (store.mode === 'box') { draft.value = { kind: 'box', x1: p.x, y1: p.y, x2: p.x, y2: p.y }; return }
   if (store.mode === 'interval') {
     if (!geomAllowed('interval')) { toast.warning('时段仅时序态可用（Ann 模型约束）'); return }
-    draft.value = { kind: 'interval', a: xToTime(p.x), b: xToTime(p.x) }; return
+    draft.value = { kind: 'interval', a: xToTime(cn.x), b: xToTime(cn.x) }; return
   }
   if (store.mode === 'level') {
     if (!geomAllowed('level')) { toast.warning('水平带仅时序态可用（Ann 模型约束）'); return }
-    draft.value = { kind: 'level', a: xToTime(p.x), b: xToTime(p.x) }; return
+    draft.value = { kind: 'level', a: xToTime(cn.x), b: xToTime(cn.x) }; return
   }
 }
 
 function onMove(evt: MouseEvent): void {
-  const p = toFrame(evt)
+  const cn = toCanvas(evt)
+  const p = toNative(evt)
   if (draft.value) {
     if (draft.value.kind === 'box') { draft.value.x2 = p.x; draft.value.y2 = p.y }
-    else if (draft.value.kind === 'interval' || draft.value.kind === 'level') draft.value.b = xToTime(p.x)
+    else if (draft.value.kind === 'interval' || draft.value.kind === 'level') draft.value.b = xToTime(cn.x)
     return
   }
-  if (dragLocalId != null) {
-    const a = store.draftAnns.find((x) => x.localId === dragLocalId)
+  if (dragLocalId.value != null) {
+    const a = store.draftAnns.find((x) => x.localId === dragLocalId.value)
     if (!a) return
     const dx = p.x - dragStart.x, dy = p.y - dragStart.y
     const c = dragOrig
@@ -153,15 +201,31 @@ function onMove(evt: MouseEvent): void {
       for (let i = 0; i < c.length; i += 2) next.push(Math.round(c[i] + dx), Math.round(c[i + 1] + dy))
       store.mutate(a.localId, { coords: next })
     } else if (a.geom === 'interval' || a.geom === 'level') {
-      const d = dx / store.frameW * (store.timeSpan.t1 - store.timeSpan.t0)
+      const [bx0, bx1] = bandRange()
+      const d = (cn.x - dragStartCn.x) / (bx1 - bx0 || 1) * (store.timeSpan.t1 - store.timeSpan.t0)
       store.mutate(a.localId, { coords: [c[0] + d, c[1] + d] })
     }
+    readPos.value = cn
+    readout.value = readText(a, p)
     return
   }
   if (store.mode === 'select') {
     const g = (evt.target as Element).closest('g.ann')
     if (svgEl.value) svgEl.value.style.cursor = g ? 'move' : 'default'
   }
+}
+
+/** 拖拽中的实时坐标读数（native 图像像素，mono + tabular-nums） */
+function readText(a: DraftAnn, p: { x: number; y: number }): string {
+  if (a.geom === 'box') {
+    return `${Math.round(a.coords[2] - a.coords[0])}×${Math.round(a.coords[3] - a.coords[1])} @ ${Math.round(a.coords[0])},${Math.round(a.coords[1])}`
+  }
+  if (a.geom === 'point') return `${Math.round(a.coords[0])}, ${Math.round(a.coords[1])}`
+  if (a.geom === 'poly' && dragHandle >= 0) {
+    return `${Math.round(a.coords[dragHandle * 2])}, ${Math.round(a.coords[dragHandle * 2 + 1])}`
+  }
+  if (a.geom === 'interval' || a.geom === 'level') return `${(a.coords[1] - a.coords[0]).toFixed(2)} s`
+  return `${Math.round(p.x)}, ${Math.round(p.y)}`
 }
 
 function normBox(c: number[]): number[] {
@@ -181,8 +245,20 @@ function onUp(): void {
     }
     draft.value = null
   }
-  if (dragLocalId != null) store.endEdit()
-  dragLocalId = null; dragHandle = -1
+  const id = dragLocalId.value
+  if (id != null) {
+    const a = store.draftAnns.find((x) => x.localId === id)
+    const inVertexSession = vertexEditId.value != null && vertexEditId.value === id && dragHandle >= 0
+    if (a && a.geom === 'box' && dragHandle >= 0 &&
+      (Math.abs(a.coords[2] - a.coords[0]) < 4 || Math.abs(a.coords[3] - a.coords[1]) < 4)) {
+      // 退化保护（v1.4）：缩放到宽或高 <4px 视为退化，回弹原尺寸、不入撤销栈
+      store.mutate(a.localId, { coords: [...dragOrig] })
+    } else if (a && !inVertexSession) {
+      store.endEdit()
+    }
+  }
+  dragLocalId.value = null; dragHandle = -1
+  readout.value = ''
 }
 
 function closePoly(): void {
@@ -195,15 +271,46 @@ function closePoly(): void {
 }
 function cancelPoly(): void { polyBuf.value = [] }
 
-defineExpose({ closePoly, cancelPoly })
+// ---- poly 顶点编辑会话：双击进入，Enter 提交一次撤销步，Esc 回退本次编辑 ----
+function enterVertexEdit(id: number): void {
+  const a = store.draftAnns.find((x) => x.localId === id)
+  if (!a || a.geom !== 'poly' || a.state === 'approved') return
+  vertexEditId.value = id
+  vertexEntry = [...a.coords]
+  store.select(id)
+}
+function leaveVertexSession(commit: boolean): boolean {
+  const id = vertexEditId.value
+  if (id == null) return false
+  vertexEditId.value = null
+  const a = store.draftAnns.find((x) => x.localId === id)
+  if (!a) return true
+  if (commit) {
+    if (JSON.stringify(a.coords) !== JSON.stringify(vertexEntry)) store.endEdit()
+  } else {
+    store.mutate(id, { coords: [...vertexEntry] })
+  }
+  return true
+}
+function commitVertex(): boolean { return leaveVertexSession(true) }
+function cancelVertexEdit(): boolean { return leaveVertexSession(false) }
+
+function onDbl(evt: MouseEvent): void {
+  if (store.mode === 'poly') { closePoly(); return }
+  if (store.mode !== 'select') return
+  const g = (evt.target as Element).closest('g.ann')
+  if (g) { enterVertexEdit(Number(g.getAttribute('data-id'))); return }
+  // 双击落在描边外（poly 只有 2px stroke，很难连续命中两次）：按当前选中的 poly 进入顶点编辑
+  const sel = store.selected
+  if (sel && sel.geom === 'poly') enterVertexEdit(sel.localId)
+}
+
+defineExpose({ closePoly, cancelPoly, commitVertex, cancelVertexEdit })
 
 // ---- 渲染辅助 ----
-function colorOf(idx: number): string {
-  const PALETTE = ['rgba(255,80,80,1)', 'rgba(80,200,255,1)', 'rgba(255,200,60,1)', 'rgba(120,255,120,1)', 'rgba(220,120,255,1)']
-  return PALETTE[idx % PALETTE.length]
-}
-function stateDash(a: DraftAnn): string {
-  return a.state === 'approved' ? '' : a.state === 'rejected' ? '4 3' : a.source !== 'manual' ? '6 3' : ''
+// 来源只用实线(human)/虚线(machine)，状态只用右栏 Tag——几何颜色一律让位给类别（UI规格 v1.4）
+function lineDash(a: DraftAnn): string {
+  return a.source === 'manual' ? '' : '6 3'
 }
 const boxHandles = (c: number[]) => ([
   { h: 0, x: c[0], y: c[1] }, { h: 1, x: (c[0] + c[2]) / 2, y: c[1] }, { h: 2, x: c[2], y: c[1] },
@@ -218,6 +325,14 @@ const cursorX = computed(() => {
 
 const stageStyle = computed(() => ({ transform: `scale(${store.zoom})`, transformOrigin: 'top left' }))
 const viewBox = computed(() => `0 0 ${store.frameW} ${store.frameH}`)
+const polyPoints = (c: number[]): string => {
+  const out: string[] = []
+  for (let i = 0; i < c.length; i += 2) out.push(`${X(c[i])},${Y(c[i + 1])}`)
+  return out.join(' ')
+}
+
+watch(() => store.mode, (m) => { if (m !== 'select') leaveVertexSession(true) })
+watch(() => store.currentUri, () => { vertexEditId.value = null; dragLocalId.value = null })
 
 onBeforeUnmount(() => { if (throttleTimer) clearTimeout(throttleTimer) })
 </script>
@@ -249,67 +364,80 @@ onBeforeUnmount(() => { if (throttleTimer) clearTimeout(throttleTimer) })
         @mousedown="onDown"
         @mousemove="onMove"
         @mouseup="onUp"
-        @dblclick="closePoly"
+        @dblclick="onDbl"
       >
-        <!-- 已存标注 -->
+        <!-- 已存标注：几何经 fit 正映射，coords 原值即 Ann 存储值（native 图像像素） -->
         <g
-          v-for="(a, idx) in store.draftAnns"
+          v-for="a in store.draftAnns"
           :key="a.localId"
           class="ann"
           :data-id="a.localId"
-          :class="{ 'is-sel': a.localId === store.selId }"
+          :class="{ 'is-sel': a.localId === store.selId, 'is-drag': a.localId === dragLocalId }"
         >
           <template v-if="a.geom === 'box'">
-            <rect :x="Math.min(a.coords[0], a.coords[2])" :y="Math.min(a.coords[1], a.coords[3])"
-              :width="Math.abs(a.coords[2] - a.coords[0])" :height="Math.abs(a.coords[3] - a.coords[1])"
-              :stroke="colorOf(idx)" :stroke-dasharray="stateDash(a)" fill="none" stroke-width="2" />
-            <text :x="Math.min(a.coords[0], a.coords[2]) + 3" :y="Math.min(a.coords[1], a.coords[3]) - 4"
-              class="ann__label" :fill="colorOf(idx)">{{ a.label || a.geom }}</text>
+            <rect :x="X(Math.min(a.coords[0], a.coords[2]))" :y="Y(Math.min(a.coords[1], a.coords[3]))"
+              :width="L(Math.abs(a.coords[2] - a.coords[0]))" :height="L(Math.abs(a.coords[3] - a.coords[1]))"
+              :stroke="store.colorOf(a)" :stroke-dasharray="lineDash(a)" fill="none" stroke-width="2" />
+            <text :x="X(Math.min(a.coords[0], a.coords[2])) + 3" :y="Y(Math.min(a.coords[1], a.coords[3])) - 4"
+              class="ann__label" :fill="store.colorOf(a)">{{ a.label || a.geom }}</text>
             <template v-if="a.localId === store.selId && store.mode === 'select'">
-              <rect v-for="hd in boxHandles(a.coords)" :key="hd.h" :data-handle="hd.h"
-                :x="hd.x - 4" :y="hd.y - 4" width="8" height="8" class="handle" :fill="colorOf(idx)" />
+              <g v-for="hd in boxHandles(a.coords)" :key="hd.h" :data-handle="hd.h" class="handle">
+                <rect :x="X(hd.x) - hitHalf" :y="Y(hd.y) - hitHalf" :width="hitHalf * 2" :height="hitHalf * 2"
+                  fill="transparent" />
+                <rect :x="X(hd.x) - visHalf" :y="Y(hd.y) - visHalf" :width="visHalf * 2" :height="visHalf * 2"
+                  class="handle__vis" />
+              </g>
             </template>
           </template>
           <template v-else-if="a.geom === 'point'">
-            <circle :cx="a.coords[0]" :cy="a.coords[1]" r="6" :stroke="colorOf(idx)"
-              :stroke-dasharray="stateDash(a)" fill="rgba(0,0,0,.3)" stroke-width="2" />
+            <circle :cx="X(a.coords[0])" :cy="Y(a.coords[1])" :r="marker(6)" :stroke="store.colorOf(a)"
+              :stroke-dasharray="lineDash(a)" fill="rgba(0,0,0,.3)" stroke-width="2" />
           </template>
           <template v-else-if="a.geom === 'poly'">
-            <polygon :points="a.coords.reduce((acc, v, i) => acc + (i % 2 ? ',' + v : (acc ? ' ' : '') + v), '')"
-              :stroke="colorOf(idx)" :stroke-dasharray="stateDash(a)" fill="none" stroke-width="2" />
-            <template v-if="a.localId === store.selId && store.mode === 'select'">
-              <circle v-for="(_, vi) in (a.coords.length / 2)" :key="vi" :data-handle="vi"
-                :cx="a.coords[vi * 2]" :cy="a.coords[vi * 2 + 1]" r="4" class="handle" :fill="colorOf(idx)" />
+            <polygon :points="polyPoints(a.coords)" :stroke="store.colorOf(a)"
+              :stroke-dasharray="lineDash(a)" fill="none" stroke-width="2" />
+            <template v-if="vertexEditId === a.localId">
+              <g v-for="(_, vi) in (a.coords.length / 2)" :key="vi" :data-handle="vi" class="handle">
+                <circle :cx="X(a.coords[vi * 2])" :cy="Y(a.coords[vi * 2 + 1])" :r="hitHalf" fill="transparent" />
+                <circle :cx="X(a.coords[vi * 2])" :cy="Y(a.coords[vi * 2 + 1])" :r="visHalf" class="handle__vis" />
+              </g>
             </template>
           </template>
           <template v-else-if="a.geom === 'interval'">
-            <rect :x="timeToX(a.coords[0])" :y="0" :width="Math.max(2, timeToX(a.coords[1]) - timeToX(a.coords[0]))"
-              :height="store.frameH" :stroke="colorOf(idx)" fill="rgba(76,141,246,.12)"
-              :stroke-dasharray="stateDash(a)" stroke-width="1.5" />
+            <rect :x="timeToX(a.coords[0])" :y="store.contentRect.y"
+              :width="Math.max(2, timeToX(a.coords[1]) - timeToX(a.coords[0]))" :height="store.contentRect.h"
+              :stroke="store.colorOf(a)" :fill="store.colorOf(a)" fill-opacity="0.12"
+              :stroke-dasharray="lineDash(a)" stroke-width="1.5" />
           </template>
           <template v-else-if="a.geom === 'level'">
-            <rect :x="timeToX(a.coords[0])" :y="0" :width="Math.max(2, timeToX(a.coords[1]) - timeToX(a.coords[0]))"
-              :height="store.frameH" :stroke="colorOf(idx)" fill="rgba(217,160,63,.14)"
-              stroke-dasharray="2 2" stroke-width="1.5" />
+            <rect :x="timeToX(a.coords[0])" :y="store.contentRect.y"
+              :width="Math.max(2, timeToX(a.coords[1]) - timeToX(a.coords[0]))" :height="store.contentRect.h"
+              :stroke="store.colorOf(a)" :fill="store.colorOf(a)" fill-opacity="0.14"
+              :stroke-dasharray="lineDash(a)" stroke-width="1.5" />
           </template>
         </g>
 
         <!-- 绘制中草稿 -->
-        <rect v-if="draft && draft.kind === 'box'" :x="Math.min(draft.x1, draft.x2)" :y="Math.min(draft.y1, draft.y2)"
-          :width="Math.abs(draft.x2 - draft.x1)" :height="Math.abs(draft.y2 - draft.y1)"
+        <rect v-if="draft && draft.kind === 'box'" :x="X(Math.min(draft.x1, draft.x2))"
+          :y="Y(Math.min(draft.y1, draft.y2))" :width="L(Math.abs(draft.x2 - draft.x1))"
+          :height="L(Math.abs(draft.y2 - draft.y1))"
           class="draft" stroke="var(--accent)" stroke-dasharray="5 4" fill="none" stroke-width="2" />
-        <polygon v-if="polyBuf.length" :points="polyBuf.map((q) => q.x + ',' + q.y).join(' ')"
-          class="draft" stroke="var(--accent)" stroke-dasharray="5 4" fill="rgba(76,141,246,.08)" stroke-width="2" />
-        <circle v-for="(q, i) in polyBuf" :key="i" :cx="q.x" :cy="q.y" r="3" fill="var(--accent)" />
+        <polygon v-if="polyBuf.length" :points="polyBuf.map((q) => X(q.x) + ',' + Y(q.y)).join(' ')"
+          class="draft" stroke="var(--accent)" stroke-dasharray="5 4" fill="none" stroke-width="2" />
+        <circle v-for="(q, i) in polyBuf" :key="i" :cx="X(q.x)" :cy="Y(q.y)" :r="marker(3)" fill="var(--accent)" />
         <rect v-if="draft && (draft.kind === 'interval' || draft.kind === 'level')"
-          :x="timeToX(Math.min(draft.a, draft.b))" :y="0"
+          :x="timeToX(Math.min(draft.a, draft.b))" :y="store.contentRect.y"
           :width="Math.max(2, timeToX(Math.max(draft.a, draft.b)) - timeToX(Math.min(draft.a, draft.b)))"
-          :height="store.frameH" class="draft" stroke="var(--accent)" stroke-dasharray="5 4"
-          fill="rgba(76,141,246,.12)" stroke-width="2" />
+          :height="store.contentRect.h" class="draft" stroke="var(--accent)" stroke-dasharray="5 4"
+          fill="none" stroke-width="2" />
 
         <!-- 时序光标 -->
-        <line v-if="store.isTimeModality" :x1="cursorX" :x2="cursorX" y1="0" :y2="store.frameH"
+        <line v-if="store.isTimeModality" :x1="cursorX" :x2="cursorX"
+          :y1="store.contentRect.y" :y2="store.contentRect.y + store.contentRect.h"
           class="cursor-line" stroke="var(--accent)" stroke-width="1" />
+
+        <!-- 拖拽实时读数（跟随光标，mono + tabular-nums） -->
+        <text v-if="readout" class="stage__readout" :x="readPos.x + 10" :y="readPos.y + 4">{{ readout }}</text>
       </svg>
     </div>
   </div>
@@ -322,11 +450,14 @@ onBeforeUnmount(() => { if (throttleTimer) clearTimeout(throttleTimer) })
 .stage__empty { display: flex; align-items: center; justify-content: center; color: var(--text-muted); font-size: var(--fs-md); }
 .stage__svg { position: absolute; inset: 0; }
 .ann { cursor: pointer; }
-.ann.is-sel rect, .ann.is-sel circle, .ann.is-sel polygon { stroke-width: 3; }
-.ann__label { font-size: 11px; font-family: var(--font-mono); pointer-events: none; }
-.handle { cursor: nwse-resize; stroke: #0d0f12; stroke-width: 1; }
+.ann.is-sel > rect, .ann.is-sel > circle, .ann.is-sel > polygon { stroke-width: 3; }
+.ann.is-drag > rect, .ann.is-drag > polygon, .ann.is-drag > circle { stroke-dasharray: 6 4; }
+.ann__label { font-size: 11px; font-family: var(--font-mono); font-variant-numeric: tabular-nums; pointer-events: none; }
+.handle { cursor: nwse-resize; }
+.handle__vis { fill: var(--accent); stroke: #0d0f12; stroke-width: 1; pointer-events: none; }
 .draft { pointer-events: none; }
 .cursor-line { pointer-events: none; opacity: .8; }
+.stage__readout { font-family: var(--font-mono); font-variant-numeric: tabular-nums; font-size: 11px; fill: var(--text-primary); paint-order: stroke; stroke: #0d0f12; stroke-width: 3; pointer-events: none; }
 .stage-spinner { position: absolute; top: 50%; left: 50%; z-index: 5; transform: translate(-50%, -50%); }
 .stage-spinner span { display: block; width: 14px; height: 14px; border: 2px solid var(--border-strong); border-top-color: var(--accent); border-radius: 50%; animation: spin .7s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }

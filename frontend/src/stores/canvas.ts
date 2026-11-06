@@ -2,7 +2,9 @@
  * canvas store（UI规格 §5.2 标注画布）：单条目的草稿标注、撤销/重做栈、
  * 帧参数、绘制模式与选中态，以及保存/提交/审核/智能标注的角色动作。
  *
- * 坐标口径：box/poly/point 用帧像素空间（frameWidth×frameHeight，与后端 render 一致）；
+ * 坐标口径（BUG-008 更正）：box/poly/point 用 **native 图像像素空间**（Ann 模型即
+ * 契约 §5.5 的"图像像素坐标"，源数组尺寸，不是含 letterbox 的出图画布尺寸）；
+ * 出图画布与 native 的换算只走 meta.info.fit，见 contentRect 与 toCanvasX/toNativeX 系列。
  * interval/level 用 UTC 秒（t0,t1）。Ann 模型约束（model.py）在前端同序校验，
  * 保证提交前就是合法几何。所有本地编辑入撤销栈，保存是"整屏覆盖式提交"
  * （POST /api/annotations replace=true），非增量。
@@ -31,6 +33,15 @@ export interface DraftAnn {
   level: number
   slice: number | null
   note: string
+  color: number[] | null
+}
+
+export interface FitRect {
+  x0: number
+  y0: number
+  w: number
+  h: number
+  scale: number
 }
 
 export interface FrameParams {
@@ -78,6 +89,7 @@ function rowToDraft(row: AnnRow, localId: number): DraftAnn {
     level: Number(ann.level ?? 0),
     slice: (ann.slice as number | null | undefined) ?? null,
     note: String(ann.note ?? ''),
+    color: Array.isArray(ann.color) ? (ann.color as number[]) : null,
   }
 }
 
@@ -89,6 +101,19 @@ export const useCanvasStore = defineStore('canvas', () => {
   const modality = ref('')
   const frameW = ref(960)
   const frameH = ref(540)
+  /**
+   * fit 映射（BUG-008 / UI规格 v1.4 §5.2 坐标系条文）：`GET /api/frame/meta` 的
+   * `info.fit = [x0, y0, w, h, scale]` 给出 native 图像（= Ann 坐标空间）等比贴进
+   * 画布（frameW×frameH，含 letterbox）后的落位。Ann.coords 一律是 native 图像像素，
+   * 因此叠加层必须走同一条 fit 映射，绘制落点必须做逆变换——否则人工标注存画布 px、
+   * 机器标注存 native px，同一字段两套坐标系。series/event 出图即画布，无 fit → 恒等。
+   */
+  const fit = ref<FitRect | null>(null)
+  /** series 出图的绘图区（画布像素）：时间→x 用它，轴外留白不参与映射 */
+  const plotBox = ref<number[] | null>(null)
+  /** Ann 坐标空间尺寸：有 fit 时 = 内容尺寸/scale，无 fit 时 = 画布尺寸 */
+  const srcW = computed(() => (fit.value && fit.value.scale > 0 ? fit.value.w / fit.value.scale : frameW.value))
+  const srcH = computed(() => (fit.value && fit.value.scale > 0 ? fit.value.h / fit.value.scale : frameH.value))
   const tRef = ref<number | null>(null)
   const tEnd = ref<number | null>(null)
   const channels = ref<string[]>([])
@@ -121,11 +146,52 @@ export const useCanvasStore = defineStore('canvas', () => {
     return { t0: a, t1: b > a ? b : a + 1 }
   })
 
+  /** 内容区在画布像素中的落位（letterbox 之后的有效绘图区） */
+  const contentRect = computed(() => {
+    const f = fit.value
+    if (!f || !(f.scale > 0) || !(f.w > 0) || !(f.h > 0))
+      return { x: 0, y: 0, w: frameW.value, h: frameH.value }
+    return { x: f.x0, y: f.y0, w: f.w, h: f.h }
+  })
+
+  // ---- native 图像像素 ↔ 画布像素（BUG-008 的唯一换算口）----
+  const toCanvasX = (nx: number): number => contentRect.value.x + nx * (fit.value?.scale ?? 1)
+  const toCanvasY = (ny: number): number => contentRect.value.y + ny * (fit.value?.scale ?? 1)
+  const toNativeX = (cx: number): number => (cx - contentRect.value.x) / (fit.value?.scale ?? 1)
+  const toNativeY = (cy: number): number => (cy - contentRect.value.y) / (fit.value?.scale ?? 1)
+
+  // ---- 同类别同色（UI规格 v1.4 §5.2）----
+  // 取色优先级：ann.color（后端显式）> labels 表 color > 按标签名稳定散列入 PALETTE。
+  // 与后端 render/overlay.py 的 PALETTE 同序，保证前后端同色。
+  const PALETTE = ['rgb(255,80,80)', 'rgb(80,200,255)', 'rgb(255,200,60)', 'rgb(120,255,120)', 'rgb(220,120,255)']
+  const labelColors = ref<Record<string, string>>({})
+  function setLabelColors(labels: { name: string; color?: string }[]): void {
+    const map: Record<string, string> = {}
+    labels.forEach((l, i) => { map[l.name] = l.color && l.color.trim() ? l.color.trim() : PALETTE[i % PALETTE.length] })
+    labelColors.value = map
+  }
+  function colorOf(ann: DraftAnn): string {
+    // 1) 后端显式 color（rgb 三元组）优先
+    if (Array.isArray(ann.color) && ann.color.length >= 3)
+      return `rgb(${ann.color.slice(0, 3).map((v) => Math.round(v)).join(',')})`
+    // 未标类别走中性灰：不占用 PALETTE，免得空 label 与某个类别撞色
+    if (!ann.label) return 'rgb(180,184,196)'
+    // 2) labels 表 color；3) 标签名稳定散列——同一 label 恒得同一色，几何/来源都不参与取色
+    const lc = labelColors.value[ann.label]
+    if (lc) return lc
+    {
+      let h = 0
+      for (const ch of ann.label) h = (h * 31 + ch.charCodeAt(0)) >>> 0
+      return PALETTE[h % PALETTE.length]
+    }
+    return PALETTE[0]
+  }
+
   function snapshot(): string {
     return JSON.stringify(draftAnns.value.map((a) => ({
       localId: a.localId, id: a.id, geom: a.geom, coords: a.coords, label: a.label,
       source: a.source, state: a.state, confidence: a.confidence, level: a.level,
-      slice: a.slice, note: a.note,
+      slice: a.slice, note: a.note, color: a.color,
     })))
   }
 
@@ -183,6 +249,7 @@ export const useCanvasStore = defineStore('canvas', () => {
       level: partial.level ?? 0,
       slice: partial.slice ?? null,
       note: partial.note ?? '',
+      color: partial.color ?? null,
     }
     if (annValid(a)) return null
     draftAnns.value.push(a)
@@ -198,9 +265,13 @@ export const useCanvasStore = defineStore('canvas', () => {
     Object.assign(a, patch)
   }
 
+  /**
+   * 一次结构性编辑落定（拖拽/缩放/顶点/改类）→ 入栈一次。
+   * 有效性只在 save 前拦截，不作为入栈条件：非法中间态也必须能被 Ctrl+Z 撤掉，
+   * 否则一次拖坏几何就再也退不回去（同内容重复快照由 pushHist 自身去重）。
+   */
   function endEdit(): void {
-    const a = selected.value
-    if (a && annValid(a)) pushHist()
+    if (selected.value) pushHist()
   }
 
   function deleteAnn(localId: number): void {
@@ -231,13 +302,25 @@ export const useCanvasStore = defineStore('canvas', () => {
       modality.value = String(meta.modality || '')
       if (meta.width) frameW.value = Number(meta.width)
       if (meta.height) frameH.value = Number(meta.height)
+      const info = (meta.info || {}) as Record<string, unknown>
+      const f = info.fit
+      fit.value = Array.isArray(f) && f.length >= 5 && Number(f[4]) > 0
+        ? { x0: Number(f[0]), y0: Number(f[1]), w: Number(f[2]), h: Number(f[3]), scale: Number(f[4]) }
+        : null
+      const pb = info.plot_box
+      plotBox.value = Array.isArray(pb) && pb.length >= 4 ? pb.map(Number) : null
       tRef.value = (meta.t_ref as number | null) ?? null
       tEnd.value = (meta.t_end as number | null) ?? null
       channels.value = (meta.channels as string[]) || []
       nViews.value = Number(meta.n_views || 0)
       nextLocalId = 1
       draftAnns.value = resp.annotations.map((r) => rowToDraft(r, nextLocalId++))
-      frameParams.value = { stretch: 'linear', gamma: 1.0, colormap: 'gray', cursor: 0, index: 0, channel: 0 }
+      // cursor 与 t_ref 同为 UTC 秒：起始光标必须落在时间轴起点，否则 0 会显示成 1970 年
+      frameParams.value = {
+        stretch: 'linear', gamma: 1.0, colormap: 'gray',
+        cursor: Number.isFinite(tRef.value as number) ? (tRef.value as number) : 0,
+        index: 0, channel: 0,
+      }
       hist.value = [snapshot()]
       hp.value = 0
       dirty.value = false
@@ -259,6 +342,7 @@ export const useCanvasStore = defineStore('canvas', () => {
       const payload = draftAnns.value.map((a) => ({
         geom: a.geom, coords: a.coords, label: a.label, source: a.source,
         confidence: a.confidence, level: a.level, slice: a.slice, note: a.note,
+        color: a.color,
       }))
       const resp = await api.putAnnotations(ctx.version, currentUri.value, payload, ctx.role, 'draft', true)
       // 回填后端 id：按提交顺序对应（replace=true 全删重写）
@@ -376,6 +460,8 @@ export const useCanvasStore = defineStore('canvas', () => {
   function reset(): void {
     currentUri.value = ''
     modality.value = ''
+    fit.value = null
+    plotBox.value = null
     draftAnns.value = []
     frameParams.value = { stretch: 'linear', gamma: 1.0, colormap: 'gray', cursor: 0, index: 0, channel: 0 }
     hist.value = []
@@ -389,7 +475,9 @@ export const useCanvasStore = defineStore('canvas', () => {
 
   return {
     currentUri, modality, frameW, frameH, frameParams, zoom, loadingFrame,
+    fit, plotBox, srcW, srcH, contentRect, toCanvasX, toCanvasY, toNativeX, toNativeY,
     tRef, tEnd, channels, nViews, isTimeModality, timeSpan,
+    labelColors, setLabelColors, colorOf,
     draftAnns, mode, label, selId, dirty, loading, saving, selected,
     canUndo, canRedo, smartAppliedVersion, smartBusy,
     openItem, save, submitItem, reviewOne, reviewBulk, smartApply, smartUndo,
