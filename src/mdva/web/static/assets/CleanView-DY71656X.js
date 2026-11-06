@@ -1,1 +1,0 @@
-import{d as e,a,h as t,o,A as s,_ as c}from"./index-CqNSY-tp.js";const _={class:"placeholder"},n=e({__name:"CleanView",setup(r){return(p,d)=>(o(),a("div",_,[t(s,{text:"清洗视图开发中（里程碑 M4）。"})]))}}),i=c(n,[["__scopeId","data-v-d23695b3"]]);export{i as default};

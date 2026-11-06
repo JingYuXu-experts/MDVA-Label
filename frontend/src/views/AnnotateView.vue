@@ -35,7 +35,8 @@ async function loadLabels(): Promise<void> {
   if (!ctx.dataset) { labelOptions.value = []; return }
   try {
     const ds = await api.getDataset(ctx.dataset)
-    const ls = (ds.labels as { name: string }[]) || []
+    const ls = (ds.labels as { name: string; color?: string }[]) || []
+    store.setLabelColors(ls)
     labelOptions.value = ls.map((l) => l.name).filter(Boolean)
     if (!store.label && labelOptions.value.length) store.label = labelOptions.value[0]
   } catch { labelOptions.value = [] }
@@ -61,9 +62,27 @@ onBeforeUnmount(() => {
 
 // ctx 就绪后再初始化队列/标签/当前条目（避免与 App boot 竞态）
 let bootstrapped = false
+
+/**
+ * 出图尺寸覆盖：`?outw=&outh=`（128–2048，越界取边界值）。
+ * 用途是 v1.4 句柄用例⑤「跨参数漂移不变」——同一份 Ann 坐标在
+ * out_width/height 不同（→ meta.fit 不同）时必须仍钉在同一图像位置上。
+ */
+function applyOutSizeFromQuery(): void {
+  const pick = (k: string): number | null => {
+    const v = Number(route.query[k])
+    return Number.isFinite(v) && v > 0 ? Math.min(2048, Math.max(128, Math.round(v))) : null
+  }
+  const w = pick('outw')
+  const h = pick('outh')
+  if (w) store.frameW = w
+  if (h) store.frameH = h
+}
+
 async function bootstrap(): Promise<void> {
   if (bootstrapped || !ctx.dataset || !ctx.version) return
   bootstrapped = true
+  applyOutSizeFromQuery()
   await Promise.all([ensureQueue(), loadLabels()])
   const q = route.query.uri
   const target = typeof q === 'string' && q ? q
@@ -130,8 +149,8 @@ function onKey(e: KeyboardEvent): void {
   if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') { e.preventDefault(); if (e.shiftKey) store.redo(); else store.undo(); return }
   if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'y') { e.preventDefault(); store.redo(); return }
   if (e.key === 'Delete' || e.key === 'Backspace') { if (store.selId != null) store.deleteAnn(store.selId); return }
-  if (e.key === 'Escape') { stageRef.value?.cancelPoly(); store.select(null); return }
-  if (e.key === 'Enter') { stageRef.value?.closePoly(); return }
+  if (e.key === 'Escape') { if (stageRef.value?.cancelVertexEdit()) return; stageRef.value?.cancelPoly(); store.select(null); return }
+  if (e.key === 'Enter') { if (stageRef.value?.commitVertex()) return; stageRef.value?.closePoly(); return }
   if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') { void step(e.key === 'ArrowRight' ? 1 : -1); return }
   if (e.key === '+' || e.key === '=') { store.zoom = Math.min(8, store.zoom + 0.2); return }
   if (e.key === '-' || e.key === '_') { store.zoom = Math.max(0.2, store.zoom - 0.2); return }
