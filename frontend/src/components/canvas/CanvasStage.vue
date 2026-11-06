@@ -233,6 +233,11 @@ function onMove(evt: MouseEvent): void {
   if (draft.value) {
     if (draft.value.kind === 'box') { draft.value.x2 = p.x; draft.value.y2 = p.y }
     else if (draft.value.kind === 'interval' || draft.value.kind === 'level') draft.value.b = xToTime(cn.x)
+    // §5.2 交互节拍（v1.4:255）：拖拽中"虚线预览 + 实时坐标读数"是一对，缺一半就不算实时。
+    // 这一句之前只有"拖动已有标注"有读数，画新框全程无读数——rev13 的"读数==读回 coords"
+    // 在画新框这条主路径上根本无从断言（M4-D 真接口验收实测 live_readout=null）。
+    readPos.value = cn
+    readout.value = readText(draftAsAnn(draft.value), p)
     return
   }
   if (dragLocalId.value != null) {
@@ -286,22 +291,34 @@ function onHover(evt: MouseEvent): void {
 function onHoverLeave(): void { hoverHandle.value = null }
 
 /**
+ * 草稿 → 读数用的最小几何视图。
+ * 关键是复用 `normBox` / `Math.min|max`：onUp 入栈用的就是这两个表达式，
+ * 读数走同一套取整规则，§5.2「读数数值 == 保存后 reload 读回的 coords」才不会自成一派。
+ */
+function draftAsAnn(d: NonNullable<Draft>): Pick<DraftAnn, 'geom' | 'coords'> {
+  if (d.kind === 'box') return { geom: 'box', coords: normBox([d.x1, d.y1, d.x2, d.y2]) }
+  return { geom: d.kind, coords: [Math.min(d.a, d.b), Math.max(d.a, d.b)] }
+}
+
+/**
  * 拖拽中的实时坐标读数（mono + tabular-nums）。
  * 前缀按 rev12 §5.2：同一个数值只允许一个名字——有原生尺寸可指时就恒标 native，
  * 后端报 null（series/event 没有原生图像尺寸）时不写前缀，绝不把它改名成"画布 native"
  * 或谎称存在 native 坐标系（rev9"null 不显示该项"同一条线）。
  */
-function readText(a: DraftAnn, p: { x: number; y: number }): string {
+function readText(a: Pick<DraftAnn, 'geom' | 'coords'>, p: { x: number; y: number }): string {
+  // coordBasis 自带尾随空格（'native '），这里绝不能再补一个空格：
+  // 条文写的是 `native W×H @ x,y`，多一个空格就是另一种字符串（rev13 的断言按条文逐字比）。
   const b = coordBasis.value
   if (a.geom === 'box') {
-    return `${b} ${Math.round(a.coords[2] - a.coords[0])}×${Math.round(a.coords[3] - a.coords[1])} @ ${Math.round(a.coords[0])},${Math.round(a.coords[1])}`
+    return `${b}${Math.round(a.coords[2] - a.coords[0])}×${Math.round(a.coords[3] - a.coords[1])} @ ${Math.round(a.coords[0])},${Math.round(a.coords[1])}`
   }
-  if (a.geom === 'point') return `${b} ${Math.round(a.coords[0])}, ${Math.round(a.coords[1])}`
+  if (a.geom === 'point') return `${b}${Math.round(a.coords[0])}, ${Math.round(a.coords[1])}`
   if (a.geom === 'poly' && dragHandle >= 0) {
-    return `${b} ${Math.round(a.coords[dragHandle * 2])}, ${Math.round(a.coords[dragHandle * 2 + 1])}`
+    return `${b}${Math.round(a.coords[dragHandle * 2])}, ${Math.round(a.coords[dragHandle * 2 + 1])}`
   }
   if (a.geom === 'interval' || a.geom === 'level') return `${(a.coords[1] - a.coords[0]).toFixed(2)} s`
-  return `${b} ${Math.round(p.x)}, ${Math.round(p.y)}`
+  return `${b}${Math.round(p.x)}, ${Math.round(p.y)}`
 }
 
 function normBox(c: number[]): number[] {
