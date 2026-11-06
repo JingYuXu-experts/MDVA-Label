@@ -20,8 +20,10 @@ function buildFrameUrl(): string {
     colormap: store.frameParams.colormap,
   }
   if (store.isTimeModality) p.cursor = store.frameParams.cursor ?? store.timeSpan.t0
-  if (store.modality === 'cube') { p.index = store.frameParams.index ?? 0; p.channel = store.frameParams.channel ?? 0 }
-  if (store.modality === 'series' && store.frameParams.channel) p.channel = store.frameParams.channel
+  // cube 只有切片轴（index），没有通道概念：多发一个 channel 会让后端
+  // render_array 直接 TypeError（500 帧出不来），所以这里按模态严格给键。
+  if (store.modality === 'cube') p.index = store.frameParams.index ?? 0
+  if (store.modality === 'series') p.channel = store.frameParams.channel ?? 0
   return frameUrl(store.currentUri, p)
 }
 function scheduleFrame(): void {
