@@ -1,0 +1,1 @@
+import{d as e,a as t,h as a,o,D as s,_ as c}from"./index-DzYdlh_6.js";const _={class:"placeholder"},n=e({__name:"AugmentView",setup(r){return(p,d)=>(o(),t("div",_,[a(s,{text:"增强视图开发中（里程碑 M4）。"})]))}}),i=c(n,[["__scopeId","data-v-b5b2010c"]]);export{i as default};
