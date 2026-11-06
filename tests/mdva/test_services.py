@@ -455,6 +455,38 @@ def test_augment_check_run_and_replay(hub_ws):
     assert hub.annotations(report["version_id"])[-1]["uri"].endswith(".png")
 
 
+def test_augment_check_reuses_the_load_lru(tmp_path, monkeypatch):
+    """REQ-W12 回归：同参数第二次 augment/check 不许再逐条重解析文件。
+
+    前端实测冷 6098ms/热 6081ms——LRU 没覆盖到这条逐条 load_any 的路。
+    这里给一个全新 Hub（独立缓存），用计数包装 io.load_any 来证明：
+    首轮逐条解析、热轮零调用、文件一变必须重新解析。
+    """
+    pytest.importorskip("astropy")
+    data = synth.make_dataset(tmp_path / "aerospace", n_telemetry=120, seed=5)
+    hub = Hub(tmp_path / "mdva.sqlite", out_dir=tmp_path / "out")
+    try:
+        uris = [str(data / "image_field.fits"), str(data / "telemetry_sim.csv")]
+        recipe = {"seed": 0, "factor": 1, "ops": [{"name": "flip",
+                                                  "params": {"p_horizontal": 1.0}}]}
+        calls: list = []
+        real = io.load_any
+        monkeypatch.setattr(io, "load_any",
+                            lambda uri, **kw: (calls.append(str(uri)), real(uri, **kw))[1])
+
+        first = hub.augment_check(uris, recipe, category="aerospace")
+        assert len(calls) == len(uris)                   # 冷态：逐条解析
+        calls.clear()
+        second = hub.augment_check(uris, recipe, category="aerospace")
+        assert calls == [] and second == first           # 热态：零重解析，结论一致
+        Path(uris[1]).touch()                            # 文件一变指纹失效，必须重解析
+        calls.clear()
+        hub.augment_check(uris, recipe, category="aerospace")
+        assert len(calls) == 1 and Path(calls[0]).samefile(uris[1])
+    finally:
+        hub.close()
+
+
 def test_operators_describe_every_layer(hub_ws):
     hub, data, root, did, vid = hub_ws
     for kind in ("analysis", "clean", "export"):
