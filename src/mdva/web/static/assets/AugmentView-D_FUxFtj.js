@@ -1,1 +1,0 @@
-import{d as e,a as t,h as a,o,A as s,_ as c}from"./index-BXnHrKWC.js";const _={class:"placeholder"},n=e({__name:"AugmentView",setup(r){return(p,d)=>(o(),t("div",_,[a(s,{text:"增强视图开发中（里程碑 M4）。"})]))}}),i=c(n,[["__scopeId","data-v-6d1c88f8"]]);export{i as default};
