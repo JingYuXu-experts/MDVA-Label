@@ -143,13 +143,103 @@ export interface FrameMeta {
   modality: string
   width: number
   height: number
+  /** REQ-W15：原生宽高（image/cube/video 给值，series/event 为 null）。仅用于显示基准，不参与换算。 */
+  native_width?: number | null
+  native_height?: number | null
   cached: boolean | number
   png_bytes?: number
   [key: string]: unknown
 }
 
-/** 整批预标注响应（干跑与 apply 共用；apply 追加 version_id/parent/n_written/carried） */
-export interface PreAnnotateResp {
+// ---- UI规格 §5.6 后端（算法替换）：形状全部来自引擎，前端不补字段 ----
+
+/** GET /api/backends 的一行 = BackendManifest.to_json() + available/reason */
+export interface BackendRow {
+  name: string
+  title: string
+  family: string
+  tasks: string[]
+  modalities: string[]
+  domains: string[]
+  supports_prompt: boolean
+  prompt_kinds: string[]
+  needs_gpu: boolean
+  needs_weights: boolean
+  license: string
+  note: string
+  params: Record<string, OpParamSpec>
+  available: boolean
+  reason: string
+}
+
+/** GET /api/recommend 的一行 = recommend.score() 的输出 */
+export interface RecommendRow {
+  backend: string
+  title: string
+  family: string
+  task: string
+  domain: string
+  score: number
+  f1: number
+  precision: number
+  recall: number
+  latency_ms: number
+  measured: boolean
+  available: boolean
+  reason: string
+  needs_gpu: boolean
+  reasons: string[]
+  manifest: BackendRow
+}
+
+export interface RecommendResp {
+  recommended: RecommendRow[]
+  has_table: boolean
+  note: string
+}
+
+export interface GateResp {
+  backend: string
+  usable: boolean
+  f1: number | null
+  reason: string
+  threshold: number
+}
+
+/** GET /api/bench 与 POST /api/bench 的行 = BenchRow.to_json() */
+export interface BenchRow {
+  backend: string
+  task: string
+  category: string
+  modality: string
+  precision: number
+  recall: number
+  f1: number
+  latency_ms: number
+  vram_gb: number | null
+  n_items: number
+  n_pred: number
+  n_truth: number
+  kind: string
+  note: string
+  [key: string]: unknown
+}
+
+/** GET /api/probe：本机能力档位 + 已注册后端名 */
+export interface ProbeResp {
+  cpu_count: number
+  ram_gb: number
+  has_gpu: boolean
+  python: string
+  machine: string
+  free_disk_gb: number
+  tier: string
+  note: string
+  registered: string[]
+  [key: string]: unknown
+}
+
+/** 整批预标注响应（干跑与 apply 共用；apply 追加 version_id/parent/n_written/carried） */export interface PreAnnotateResp {
   n_items: number
   n_annotations: number
   n_ok: number
