@@ -139,7 +139,7 @@ async function doReplay() {
           </button>
           <div v-if="store.openRow === idx" class="lin__detail">
             <!-- B 级：真 before/after 双联，两帧都走 /api/frame；未出图前先给骨架 -->
-            <div class="pair">
+            <div class="pair" data-level="B">
               <figure class="pair__cell">
                 <MSkeleton class="pair__sk" :show="!frameReady(row.source, 'b')" variant="grid" :count="1" />
                 <img

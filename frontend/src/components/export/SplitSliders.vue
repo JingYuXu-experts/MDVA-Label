@@ -37,7 +37,6 @@ const ratioStr = computed(() => String(store.payload[store.splitKey] ?? ''))
           :aria-label="`${store.chosen} ${f} 占比`"
           @update:model-value="store.setSplit(i, Number($event))"
         />
-        <span class="split__pct num">{{ store.split[i] }}%</span>
       </div>
 
       <p
@@ -84,9 +83,8 @@ const ratioStr = computed(() => String(store.payload[store.splitKey] ?? ''))
 
 <style scoped>
 .split { display: flex; flex-direction: column; gap: var(--sp-3); max-width: 620px; }
-.split__row { display: grid; grid-template-columns: 72px 1fr 56px; align-items: center; gap: var(--sp-3); }
+.split__row { display: grid; grid-template-columns: 72px 1fr; align-items: center; gap: var(--sp-3); }
 .split__name { font-family: var(--font-mono); font-size: var(--fs-xs); color: var(--text-secondary); }
-.split__pct { font-family: var(--font-mono); font-size: var(--fs-md); color: var(--text-primary); text-align: right; }
 .split__sum { margin: 0; font-size: var(--fs-xs); line-height: 1.5; }
 .split__sum.is-ok { color: var(--text-secondary); }
 .split__sum.is-bad { color: var(--danger); font-weight: 600; }
