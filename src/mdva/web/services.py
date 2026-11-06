@@ -685,8 +685,13 @@ class Hub:
         c = [float(v) for v in ann.coords]
         eps = Hub._BOUNDS_EPS
         if ann.geom == "box":
-            x, y, w, h = c[:4]
-            if x < -eps or y < -eps or x + w > nw + eps or y + h > nh + eps:
+            # coords 是角点 [x0, y0, x1, y1]（annotate/model.py:34），不是 [x, y, w, h]。
+            # 旧写法按宽高解包后上界实际变成 x0 + x1 > nw，与原生尺寸无关地双错：
+            # 右半区/下半区的合法框被 400 误杀，而 x1 真越界（x0+x1 仍 <= nw）反而放行。
+            # 导出侧 export/base.py clamp_box 用的是角点语义，两层判据必须一致（W22-3）。
+            # 下界与 _BOUNDS_EPS 保留原语义，只是改成两端都看（负坐标仍拒）。
+            if (min(c[0], c[2]) < -eps or min(c[1], c[3]) < -eps
+                    or max(c[0], c[2]) > nw + eps or max(c[1], c[3]) > nh + eps):
                 return f"box [{c[0]:g}, {c[1]:g}, {c[2]:g}, {c[3]:g}] 超出 {nw}x{nh}"
         elif ann.geom == "point":
             if not (-eps <= c[0] <= nw - 1 + eps and -eps <= c[1] <= nh - 1 + eps):
