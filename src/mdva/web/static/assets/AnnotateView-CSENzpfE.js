@@ -1,1 +1,0 @@
-import{d as e,a as t,h as a,o,D as s,_ as n}from"./index-DzYdlh_6.js";const c={class:"placeholder"},_=e({__name:"AnnotateView",setup(r){return(p,d)=>(o(),t("div",c,[a(s,{text:"标注画布视图开发中（里程碑 M2：交互原型经产品经理确认后进入实现）。当前可先在管理台浏览条目与统计。"})]))}}),l=n(_,[["__scopeId","data-v-47887a07"]]);export{l as default};

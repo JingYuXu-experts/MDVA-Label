@@ -147,3 +147,20 @@ export interface FrameMeta {
   png_bytes?: number
   [key: string]: unknown
 }
+
+/** 整批预标注响应（干跑与 apply 共用；apply 追加 version_id/parent/n_written/carried） */
+export interface PreAnnotateResp {
+  n_items: number
+  n_annotations: number
+  n_ok: number
+  errors: Record<string, unknown>
+  speedup: number
+  workers: number
+  by_uri: Record<string, AnnRow['ann'][]>
+  version_id?: string
+  parent?: string
+  n_written?: number
+  deduped?: number
+  carried?: number
+  task_id?: string
+}

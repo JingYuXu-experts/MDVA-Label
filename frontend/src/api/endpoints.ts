@@ -7,7 +7,7 @@ export { frameUrl, mosaicUrl } from './client'
 import type {
   HealthResp, WorkspaceRow, DatasetRow, VersionRow, LabelDef, ItemRow,
   StatsResp, ProgressResp, ScanResp, ThumbsResp, TaskRow, AnnRow,
-  CollectResp, FrameMeta,
+  CollectResp, FrameMeta, PreAnnotateResp,
 } from './types'
 
 // ---- 5.1 元信息 ----
@@ -111,3 +111,22 @@ export const runBench = (root: string, categories = '', only: string[] = [],
 export const runActiveRun = (version: string, uris: string[],
   params: Record<string, unknown> = {}, signal?: AbortSignal) =>
   postLong<Record<string, unknown>>('/smart/active_run', { version, uris, ...params }, signal)
+
+// ---- 5.8 智能标注（§7 参数链：apply 返回新 version_id，undo 绑定它）----
+export const smartSameImage = (uri: string, params: Record<string, unknown> = {}) =>
+  post<{ uri: string; anns: AnnRow['ann'][]; n: number }>('/smart/same_image', { uri, ...params })
+export const smartPreannotate = (uris: string[], params: Record<string, unknown> = {}) =>
+  post<PreAnnotateResp>('/smart/preannotate', { uris, ...params })
+/** apply 落新版本，响应 version_id 必须保留供 undo 绑定（契约 §7） */
+export const smartApply = (version: string, uris: string[], params: Record<string, unknown> = {}) =>
+  postLong<PreAnnotateResp>('/smart/apply', { version, uris, ...params })
+export const smartUndo = (version: string, role = 'annotator') =>
+  post<Record<string, unknown>>('/smart/undo', { version, role })
+export const smartSpeedup = (uris: string[], params: Record<string, unknown> = {}, signal?: AbortSignal) =>
+  get<Record<string, unknown>>('/smart/speedup', { uris, ...params }, { signal })
+export const smartHard = (version: string, uris: string[], params: Record<string, unknown> = {}) =>
+  get<Record<string, unknown>>('/smart/hard', { version, uris, ...params })
+export const smartActiveRound = (version: string, uris: string[], params: Record<string, unknown> = {}) =>
+  post<Record<string, unknown>>('/smart/active_round', { version, uris, ...params })
+export const smartHistory = (version: string) =>
+  get<{ rounds: Record<string, unknown>[] }>('/smart/history', { version })

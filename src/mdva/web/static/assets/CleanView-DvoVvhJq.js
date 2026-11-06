@@ -1,1 +1,0 @@
-import{d as e,a,h as t,o,D as s,_ as c}from"./index-DzYdlh_6.js";const _={class:"placeholder"},n=e({__name:"CleanView",setup(r){return(d,p)=>(o(),a("div",_,[t(s,{text:"清洗视图开发中（里程碑 M4）。"})]))}}),i=c(n,[["__scopeId","data-v-1a11add7"]]);export{i as default};
