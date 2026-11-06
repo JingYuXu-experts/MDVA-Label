@@ -17,7 +17,7 @@ from typing import Iterable, Optional
 from . import state as ST
 from .model import Ann
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
 _DDL = """
 CREATE TABLE IF NOT EXISTS dataset(
@@ -61,8 +61,35 @@ CREATE INDEX IF NOT EXISTS idx_task_dataset ON task(dataset_id, kind);
 CREATE INDEX IF NOT EXISTS idx_review_target ON review(version_id, annotation_id);
 """
 
+def _migrate_v1_noop(store: "Store") -> None:
+    """v0 -> v1：建表由 `executescript(_DDL)` 负责，这里没有额外动作。"""
+
+
+def _migrate_v2_relative_uri(store: "Store") -> None:
+    """v1 -> v2（D3）：库内绝对路径 -> 相对工作区根（mdva.sqlite 所在目录）。
+
+    只改写得出相对形式的行（路径在工作区之下）；指不到工作区的历史行保持原样——
+    `to_abs` 对绝对路径原样放行，旧库照常可读，绝不因为迁移丢一条标注。
+    """
+    db = store.db
+    for table in ("annotation", "review"):
+        rows = db.execute(f"SELECT rowid AS rid, item_uri FROM {table}").fetchall()
+        for row in rows:
+            if not row["item_uri"]:
+                continue
+            rel = store.to_rel(row["item_uri"])
+            if rel != row["item_uri"]:
+                db.execute(f"UPDATE {table} SET item_uri=? WHERE rowid=?", (rel, row["rid"]))
+    for row in db.execute("SELECT id, root FROM dataset").fetchall():
+        if not row["root"]:
+            continue
+        rel = store.to_rel(row["root"])
+        if rel != row["root"]:
+            db.execute("UPDATE dataset SET root=? WHERE id=?", (rel, row["id"]))
+
+
 #: 迁移列表：`user_version` 从 n 升到 n+1 就跑 `_MIGRATIONS[n]`。毕设规模不上 alembic。
-_MIGRATIONS: list = []
+_MIGRATIONS: list = [_migrate_v1_noop, _migrate_v2_relative_uri]
 
 
 def _new_id(prefix: str = "") -> str:
@@ -84,6 +111,9 @@ class Store:
     def __init__(self, db_path):
         self.path = Path(db_path)
         self.path.parent.mkdir(parents=True, exist_ok=True)
+        #: 工作区根 = 库文件所在目录。D3 之后库内 uri 一律相对这里存，
+        #: 整个目录拷走 / 换盘符，标注照样能定位到文件。
+        self.base = self.path.parent.resolve()
         # FastAPI 在线程池里跑同步 handler，连接必须跨线程复用 -> 一把全局写锁
         self._lock = threading.RLock()
         self.db = sqlite3.connect(str(self.path), check_same_thread=False)
@@ -100,7 +130,7 @@ class Store:
             version = int(self.db.execute("PRAGMA user_version").fetchone()[0])
             if version < SCHEMA_VERSION:
                 for step in _MIGRATIONS[version:SCHEMA_VERSION]:
-                    step(self.db)
+                    step(self)
                 self.db.execute(f"PRAGMA user_version={SCHEMA_VERSION}")
 
     def close(self) -> None:
@@ -113,6 +143,42 @@ class Store:
     def __exit__(self, *_exc) -> None:
         self.close()
 
+    # ------------------------------------------------------------------ uri 归一（D3）
+
+    def to_rel(self, uri) -> str:
+        """入库/发布归一：工作区根之下的绝对路径 -> posix 相对路径。
+
+        指不到工作区的路径（别的盘、别的机器遗留）保持原样绝对——宁可留着一条
+        能看出问题的绝对路径，也不造一个解析不回原文件的相对路径。
+        """
+        text = str(uri or "")
+        if not text:
+            return text
+        p = Path(text)
+        if not p.is_absolute():
+            return p.as_posix()
+        try:
+            return p.resolve().relative_to(self.base).as_posix()
+        except (ValueError, OSError):
+            return text
+
+    def to_abs(self, uri) -> str:
+        """文件访问前的还原：相对 uri 拼回工作区根；绝对路径原样放行（旧库兼容）。"""
+        text = str(uri or "")
+        if not text:
+            return text
+        p = Path(text)
+        if p.is_absolute():
+            return text
+        return str(self.base / p)
+
+    def relativize(self, text) -> str:
+        """出站载荷归一：只把 base 之下的绝对路径转相对，其余字符串一律不动。"""
+        value = str(text)
+        if not value or not Path(value).is_absolute():
+            return value
+        return self.to_rel(value)
+
     # ------------------------------------------------------------------ 数据集
 
     def create_dataset(self, name: str, type: str, root, meta: Optional[dict] = None) -> str:
@@ -122,16 +188,16 @@ class Store:
         with self._lock, self.db:
             self.db.execute(
                 "INSERT INTO dataset(id,name,type,root,created,meta) VALUES(?,?,?,?,?,?)",
-                (did, name, type, str(Path(root).resolve()), time.time(),
+                (did, name, type, self.to_rel(Path(root).resolve()), time.time(),
                  json.dumps(meta or {}, ensure_ascii=False)))
         return did
 
     def get_dataset(self, dataset_id: str) -> Optional[dict]:
         row = self.db.execute("SELECT * FROM dataset WHERE id=?", (dataset_id,)).fetchone()
-        return _row_dataset(row) if row else None
+        return _row_dataset(row, self.base) if row else None
 
     def list_datasets(self) -> list[dict]:
-        return [_row_dataset(r) for r in
+        return [_row_dataset(r, self.base) for r in
                 self.db.execute("SELECT * FROM dataset ORDER BY created DESC")]
 
     # ------------------------------------------------------------------ 版本 DAG
@@ -236,7 +302,7 @@ class Store:
         if state not in ST.STATES:
             raise ValueError(f"未知状态 {state}")
         aid = annotation_id or _new_id("a")
-        payload = (aid, version_id, str(item_uri), ann.geom, json.dumps(ann.coords),
+        payload = (aid, version_id, self.to_rel(item_uri), ann.geom, json.dumps(ann.coords),
                    ann.label, ann.source, float(ann.confidence), ann.backend,
                    ann.slice, int(ann.level),
                    json.dumps(list(ann.color)) if ann.color else None, ann.note,
@@ -262,7 +328,7 @@ class Store:
         sql, args = "SELECT * FROM annotation WHERE version_id=?", [version_id]
         if item_uri is not None:
             sql += " AND item_uri=?"
-            args.append(str(item_uri))
+            args.append(self.to_rel(item_uri))     # 查询口径与入库口径一致，绝对/相对都能命中
         if state:
             sql += " AND state=?"
             args.append(state)
@@ -273,7 +339,9 @@ class Store:
         return [_row_ann(r) for r in self.db.execute(sql, args)]
 
     def annotated_items(self, version_id: str) -> set:
-        return {r["item_uri"] for r in
+        """有标注的数据项集合。返回**绝对路径**：调用方都拿它去磁盘定位文件，
+        库里存的相对形式只是存储细节，不外泄给文件访问代码。"""
+        return {self.to_abs(r["item_uri"]) for r in
                 self.db.execute("SELECT DISTINCT item_uri FROM annotation WHERE version_id=?",
                                 (version_id,))}
 
@@ -304,7 +372,7 @@ class Store:
                     reason: str = "") -> int:
         ids = [r["id"] for r in self.db.execute(
             "SELECT id,state FROM annotation WHERE version_id=? AND item_uri=?",
-            (version_id, str(item_uri)))]
+            (version_id, self.to_rel(item_uri)))]
         moved = 0
         for aid in ids:
             cur = self.get_annotation(aid)
@@ -458,8 +526,11 @@ def _dataset_of_version(db, version_id: str):
     return row["dataset_id"] if row else None
 
 
-def _row_dataset(row: sqlite3.Row) -> dict:
-    return {"id": row["id"], "name": row["name"], "type": row["type"], "root": row["root"],
+def _row_dataset(row: sqlite3.Row, base: Optional[Path] = None) -> dict:
+    root = row["root"]
+    if root and base is not None and not Path(root).is_absolute():
+        root = str(base / root)      # 库里存相对（可移植），读出来永远是绝对（可直接用）
+    return {"id": row["id"], "name": row["name"], "type": row["type"], "root": root,
             "created": row["created"], "meta": _loads(row["meta"], {})}
 
 

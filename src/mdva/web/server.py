@@ -89,6 +89,17 @@ class ApiHandler(BaseHTTPRequestHandler):
     def do_POST(self) -> None:
         self._handle("POST")
 
+    # DEV-01（契约核对 v1.2）：PUT/DELETE/PATCH 若不定义，stdlib 会回 501+HTML；
+    # 契约 §1.3/§3 要求其余方法统一 405 {error} JSON，走 _handle 即可命中该分支。
+    def do_PUT(self) -> None:
+        self._handle("PUT")
+
+    def do_DELETE(self) -> None:
+        self._handle("DELETE")
+
+    def do_PATCH(self) -> None:
+        self._handle("PATCH")
+
     def do_OPTIONS(self) -> None:
         # 只服务本机界面：允许任何来源，等于给"从别的端口开的前端页面"留条路
         self._send(204, {"Access-Control-Allow-Methods": "GET, POST, OPTIONS",

@@ -188,9 +188,12 @@ def inherit(store, from_version: str, to_version: str, keep=None,
     copied = 0
     for row in store.list_annotations(from_version):
         uri = row["item_uri"]
-        if allowed is not None and uri not in allowed:
+        # D3：库里是相对 uri，而 keep/records 来自磁盘侧（绝对路径）——比对前先还原，
+        # 否则整版继承会静默失配，人工标注被"洗没"。
+        abs_uri = store.to_abs(uri)
+        if allowed is not None and uri not in allowed and abs_uri not in allowed:
             continue
-        rec = records.get(uri)
+        rec = records.get(abs_uri) or records.get(uri)
         ann = row["ann"]
         if rec:
             ann, _ = OPS.map_geometry(ann, [(c["op"], c["params"]) for c in rec["chain"]],
