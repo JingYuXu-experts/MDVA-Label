@@ -293,7 +293,8 @@ def test_clean_keeps_annotations_of_items_outside_the_subset(store, images):
     report = clean.apply(s, vid, [{"name": "dedup"}], uris=[images["a"], images["b"]],
                          out_dir=root / "out")
     dropped = {d["uri"] for d in report["dropped"]}
-    assert {r["item_uri"] for r in s.list_annotations(report["version"])} == \
+    # D3：库内 item_uri 是相对工作区根的相对路径，比对磁盘绝对路径前先还原
+    assert {s.to_abs(r["item_uri"]) for r in s.list_annotations(report["version"])} == \
         {images["a"], images["b"], images["c"]} - dropped
 
 
@@ -452,6 +453,7 @@ def test_transformed_annotation_still_wraps_the_object(store, tmp_path):
     moved = rows[0]["ann"].coords
     assert moved[0] == pytest.approx(box[0] - 20) and moved[2] == pytest.approx(box[2] - 20)
 
-    cut = np.asarray(io.load_any(rows[0]["item_uri"]).load(), dtype=np.float64)
+    # D3：库内 uri 为相对路径，加载前先还原成绝对路径
+    cut = np.asarray(io.load_any(s.to_abs(rows[0]["item_uri"])).load(), dtype=np.float64)
     patch = cut[int(moved[1]):int(moved[3]) + 1, int(moved[0]):int(moved[2]) + 1]
     assert (patch > 200).any(), "框里必须还套着那个目标"

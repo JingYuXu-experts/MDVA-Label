@@ -171,7 +171,8 @@ def test_full_workflow_never_opens_a_connection(offline_ws, no_outbound_network)
     check = call(ws, "POST", "/api/export/validate", None,
                  {**at, "version": vid, "dir": exported.json_body["out_dir"]})
     assert check.json_body["ok"] is True, check.json_body["summary"]
-    assert Path(exported.json_body["out_dir"]).is_dir()
+    # D3：API 返回的路径是相对工作区根（root）的形式，落盘检查前先还原
+    assert Path(root, exported.json_body["out_dir"]).is_dir()
     # 时序也走一遍：加载与渲染都只读本地文件
     assert call(ws, "GET", "/api/frame", {**at, "uri": series, "width": 320}).status == 200
 
@@ -211,7 +212,8 @@ def test_generated_training_scripts_contain_no_urls(offline_ws, tmp_path):
     report = call(ws, "POST", "/api/export", None, {"version": created["version_id"],
                                                     "format": "yolo",
                                                     "scripts": True}).json_body
-    out = Path(report["out_dir"])
+    # D3：API 返回的 out_dir 是相对工作区根（root）的形式，读文件前先还原
+    out = Path(root, report["out_dir"])
     for name in ("train.py", "DATASET.md"):
         text = (out / name).read_text(encoding="utf-8")
         assert "http://" not in text and "https://" not in text, name

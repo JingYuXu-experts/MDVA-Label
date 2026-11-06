@@ -69,6 +69,24 @@ def png_b64(rgb: np.ndarray) -> str:
     return base64.b64encode(buf.getvalue()).decode("ascii")
 
 
+def _relativize(value, store) -> Any:
+    """出站载荷归一（D3）：把工作区根之下的绝对路径统一转成相对 uri。
+
+    只动"看起来是绝对路径"的字符串，标签、状态、理由文本一概不碰；
+    dict 的键也转（`by_uri` 这类以 uri 为键的报告前端要按原样回传）。
+    """
+    if isinstance(value, str):
+        return store.relativize(value)
+    if isinstance(value, dict):
+        return {(store.relativize(k) if isinstance(k, str) else k): _relativize(v, store)
+                for k, v in value.items()}
+    if isinstance(value, list):
+        return [_relativize(v, store) for v in value]
+    if isinstance(value, tuple):
+        return tuple(_relativize(v, store) for v in value)
+    return value
+
+
 def slice_of(params: dict) -> Slice:
     """查询参数里的 index / t0 / t1 -> Slice（两种语义在同一层里共存）。"""
     index = int(params.get("index") or 0)
@@ -186,6 +204,7 @@ class Hub:
         会穿透帧缓存重新走 load_any——对遥测 CSV 来说每穿透一次就是 5.7 秒的
         逐值 strptime。这一层把解析结果按文件指纹留住，穿透帧缓存也不再重解析。
         """
+        uri = self.store.to_abs(uri)      # D3：库里/请求里的相对 uri 在这里还原成绝对路径
         path = Path(str(uri))
         fp = self._fingerprint(path)
         if fp is None:
@@ -228,6 +247,16 @@ class Hub:
     def _invalidate_scans(self) -> None:
         with self._lock:
             self._scans.clear()
+
+    # ------------------------------------------------------------------ uri 归一（D3）
+
+    def _abs(self, uris: Sequence) -> list:
+        """入站 uri 列表 -> 绝对路径：引擎（io/clean/augment/prompts）只认磁盘路径。"""
+        return [self.store.to_abs(u) for u in uris]
+
+    def _rel(self, value) -> Any:
+        """出站载荷 -> 相对 uri：契约（接口约定 v1.2 §9）是后端原样返回相对路径。"""
+        return _relativize(value, self.store)
 
     # ------------------------------------------------------------------ 数据集
 
@@ -335,7 +364,7 @@ class Hub:
         uris = sorted(set(grouped) | set(self._disk_uris(dataset, "")))
         out = []
         for uri in uris:
-            kind = _safe_sniff(uri)
+            kind = _safe_sniff(self.store.to_abs(uri))
             if modality and kind != modality:
                 continue
             anns = grouped.get(uri, [])
@@ -353,7 +382,9 @@ class Hub:
         root = Path(dataset.get("root") or ".")
         if not root.is_dir():
             return []
-        return [str(i.uri) for i in self._scan_items(root, limit=100_000)
+        # D3：磁盘扫描出来的是绝对路径，统一转成与库内一致的相对 uri，
+        # items() 的"磁盘 ∪ 已标注"并集两边才是同一种字符串。
+        return [self.store.to_rel(i.uri) for i in self._scan_items(root, limit=100_000)
                 if not modality or i.modality == modality]
 
     def stats(self, dataset_id: str, version_id: str = "") -> dict:
@@ -473,7 +504,7 @@ class Hub:
     def mosaic(self, uris: Sequence, params: Optional[dict] = None) -> dict:
         params = dict(params or {})
         uris = [str(u) for u in uris]
-        items = [MDIO.load_any(u) for u in uris]
+        items = [MDIO.load_any(self.store.to_abs(u)) for u in uris]
         cell = (int(params.get("cell_width") or 320), int(params.get("cell_height") or 200))
         cols = int(params.get("cols") or 0) or max(1, min(len(items), 4))
         rows = int(params.get("rows") or 0) or max(1, math.ceil(len(items) / cols))
@@ -489,7 +520,7 @@ class Hub:
         from .. import analysis
 
         params = dict(params or {})
-        item = MDIO.load_any(str(uri), modality=params.get("modality") or None)
+        item = MDIO.load_any(self.store.to_abs(uri), modality=params.get("modality") or None)
         sl = slice_of(params)
         out = {"uri": str(uri), "modality": item.modality, "metrics": {}, "flags": [],
                "anns": [], "errors": {}}
@@ -659,13 +690,13 @@ class Hub:
                         params.get("label", ""), params.get("role", "positive"),
                         params.get("source_uri", ""))
         if prompt.kind in ("box", "poly", "point") and prompt.source_uri:
-            return resolve_prompt(prompt.source_uri, prompt, params)
+            return resolve_prompt(self.store.to_abs(prompt.source_uri), prompt, params)
         return prompt
 
     def same_image(self, uri: str, params: dict) -> dict:
         from ..annotate.prompts import same_image
 
-        item = MDIO.load_any(str(uri))
+        item = MDIO.load_any(self.store.to_abs(uri))
         anns = same_image(item, self.prompt_from(params), params.get("backend", "visual_prompt"),
                           params.get("backend_params") or {},
                           window=slice_of(params))
@@ -675,15 +706,15 @@ class Hub:
         """整批预标注。`apply_to` 给了版本 id 就落库并产新版本（不覆盖人工标注）。"""
         from ..annotate.prompts import apply_results, preannotate
 
-        result = preannotate([str(u) for u in uris], params.get("backend", "cosmic_reject"),
+        result = preannotate(self._abs(uris), params.get("backend", "cosmic_reject"),
                              params.get("backend_params") or {},
                              workers=int(params.get("workers") or 0),
                              executor=params.get("executor", "thread"),
                              prompts=[self.prompt_from(params)] if params.get("coords") else ())
         payload = {"n_items": result["n_items"], "n_annotations": result["n_annotations"],
-                   "n_ok": result["n_ok"], "errors": result["errors"],
+                   "n_ok": result["n_ok"], "errors": self._rel(result["errors"]),
                    "speedup": result["speedup"], "workers": result["workers"],
-                   "by_uri": {k: [_plain(a.to_json()) for a in v]
+                   "by_uri": {self.store.to_rel(k): [_plain(a.to_json()) for a in v]
                               for k, v in result["results"].items()}}
         if apply_to:
             written = apply_results(self.store, apply_to, result,
@@ -703,7 +734,7 @@ class Hub:
     def speedup(self, uris: Sequence, params: dict) -> dict:
         from ..annotate.prompts import measure_speedup
 
-        return _plain(measure_speedup([str(u) for u in uris],
+        return _plain(measure_speedup(self._abs(uris),
                                       params.get("backend", "cosmic_reject"),
                                       params.get("backend_params") or {},
                                       workers=int(params.get("workers") or 4),
@@ -712,21 +743,22 @@ class Hub:
     def hard_examples(self, version_id: str, uris: Sequence, params: dict) -> dict:
         from ..annotate.active import hard_examples
 
-        return _plain(hard_examples(self.store, version_id, [str(u) for u in uris],
-                                   params.get("backend", "cosmic_reject"),
-                                   k=int(params.get("k") or 20),
-                                   params=params.get("backend_params") or {}))
+        return self._rel(_plain(hard_examples(self.store, version_id, self._abs(uris),
+                                              params.get("backend", "cosmic_reject"),
+                                              k=int(params.get("k") or 20),
+                                              params=params.get("backend_params") or {})))
 
     def active_round(self, version_id: str, uris: Sequence, params: dict) -> dict:
         """选下一轮该标哪些（不确定性排序），只读不落库。"""
         from ..annotate.active import pick_round, uncertainty, stop_advice
 
-        ranked = uncertainty([str(u) for u in uris], params.get("backend", "cosmic_reject"),
+        ranked = uncertainty(self._abs(uris), params.get("backend", "cosmic_reject"),
                              params.get("backend_params") or {})
         budget = int(params.get("budget") or 20)
         chosen = pick_round(ranked, budget, self.store.annotated_items(version_id))
-        return {"ranked": ranked[:max(20, budget)], "chosen": chosen, "budget": budget,
-                "advice": stop_advice(self.round_history(version_id))}
+        return self._rel({"ranked": ranked[:max(20, budget)], "chosen": chosen,
+                          "budget": budget,
+                          "advice": stop_advice(self.round_history(version_id))})
 
     def round_history(self, version_id: str) -> list:
         return [t["report"] for t in self.store.list_tasks(kind="active")
@@ -750,14 +782,15 @@ class Hub:
         table = params.get("table")
         if table is None:
             table = self.bench_table()
-        return _plain(run_loop(self.store, version_id, [str(u) for u in uris], backend, oracle,
-                              truth, task, domain=params.get("domain", ""),
-                              rounds=int(params.get("rounds") or 4),
-                              budget=int(params.get("budget") or 5),
-                              params=params.get("backend_params") or {},
-                              min_f1=float(params.get("min_f1") or 0.90), table=table,
-                              workers=int(params.get("workers") or 0),
-                              enforce_gate=bool(params.get("enforce_gate", True))))
+        return self._rel(_plain(run_loop(self.store, version_id, self._abs(uris), backend,
+                                         oracle,
+                                         truth, task, domain=params.get("domain", ""),
+                                         rounds=int(params.get("rounds") or 4),
+                                         budget=int(params.get("budget") or 5),
+                                         params=params.get("backend_params") or {},
+                                         min_f1=float(params.get("min_f1") or 0.90), table=table,
+                                         workers=int(params.get("workers") or 0),
+                                         enforce_gate=bool(params.get("enforce_gate", True)))))
 
     def _dataset_root_of_version(self, version_id: str) -> Path:
         version = self.store.get_version(version_id)
@@ -771,8 +804,8 @@ class Hub:
     def clean_preview(self, uris: Sequence, specs: Sequence, calibration: str = "") -> dict:
         from .. import clean as CL
 
-        return _plain(CL.preview(CL.load_items([str(u) for u in uris]), specs,
-                                 _calibration_or_none(calibration)))
+        return _plain(CL.preview(CL.load_items(self._abs(uris)), specs,
+                                 _calibration_or_none(self.store.to_abs(calibration))))
 
     def clean_apply(self, version_id: str, specs: Sequence, uris: Sequence = (),
                     calibration: str = "", write_transformed: bool = False,
@@ -780,28 +813,28 @@ class Hub:
         from .. import clean as CL
 
         report = CL.apply(self.store, version_id, specs,
-                          uris=[str(u) for u in uris] or None, out_dir=self.out_dir,
-                          calibration=_calibration_or_none(calibration),
+                          uris=self._abs(uris) or None, out_dir=self.out_dir,
+                          calibration=_calibration_or_none(self.store.to_abs(calibration)),
                           write_transformed=bool(write_transformed), author=author)
         self._invalidate_scans()      # 清洗可能删/写文件，条目列表必须立刻反映
-        return _plain({**report, "version_id": report["version"]})
+        return self._rel(_plain({**report, "version_id": report["version"]}))
 
     def clean_rollback(self, version_id: str) -> dict:
         from .. import clean as CL
 
-        out = _plain(CL.rollback(self.store, version_id))
+        out = self._rel(_plain(CL.rollback(self.store, version_id)))
         self._invalidate_scans()
         return out
 
     def clean_dropped(self, version_id: str) -> list:
         from .. import clean as CL
 
-        return _plain(CL.dropped_of(self.store, version_id))
+        return self._rel(_plain(CL.dropped_of(self.store, version_id)))
 
     def augment_check(self, uris: Sequence, recipe: dict, category: str = "") -> dict:
         from .. import augment as AUG
 
-        items = [MDIO.load_any(str(u)) for u in uris]
+        items = [MDIO.load_any(self.store.to_abs(u)) for u in uris]
         return {"warnings": AUG.check(AUG.Recipe.from_obj(recipe), items, category=category)}
 
     def augment_run(self, version_id: str, recipe: dict, uris: Sequence = (),
@@ -809,21 +842,21 @@ class Hub:
         from .. import augment as AUG
 
         report = AUG.run(self.store, version_id, AUG.Recipe.from_obj(recipe),
-                         out_dir=self.out_dir, uris=[str(u) for u in uris] or None,
+                         out_dir=self.out_dir, uris=self._abs(uris) or None,
                          author=author)
         self._invalidate_scans()      # 增强写盘后条目列表要能看到新文件
-        return _plain({**report, "version_id": report["version"]})
+        return self._rel(_plain({**report, "version_id": report["version"]}))
 
     def augment_replay(self, version_id: str) -> dict:
         from .. import augment as AUG
 
-        return _plain(AUG.replay(self.store, version_id))
+        return self._rel(_plain(AUG.replay(self.store, version_id)))
 
     def augment_lineage(self, version_id: str) -> list:
         """逐条增强谱系：源文件 → 写了什么 → 参数链。界面上"这条从哪来"就看这个。"""
         from .. import augment as AUG
 
-        return _plain(AUG.read_lineage(self.store, version_id))
+        return self._rel(_plain(AUG.read_lineage(self.store, version_id)))
 
     # ------------------------------------------------------------------ 导出
 
@@ -831,16 +864,17 @@ class Hub:
                out_dir: str = "", make_scripts: bool = False) -> dict:
         from .. import export as EXP
 
-        return _plain(EXP.export(self.store, version_id, fmt,
-                                 out_dir=out_dir or str(self.out_dir / "export" / fmt),
-                                 make_scripts=bool(make_scripts), **(params or {})))
+        return self._rel(_plain(EXP.export(self.store, version_id, fmt,
+                                           out_dir=out_dir or str(self.out_dir / "export" / fmt),
+                                           make_scripts=bool(make_scripts), **(params or {}))))
 
     def export_validate(self, version_id: str, directory: str) -> dict:
         from .. import export as EXP
         from ..export.validate import summarize
 
-        check = EXP.validate_export(directory, version_id, self.store)
-        return {"ok": check["ok"], "summary": summarize(check), "check": _plain(check)}
+        check = EXP.validate_export(self.store.to_abs(directory), version_id, self.store)
+        return {"ok": check["ok"], "summary": summarize(check),
+                "check": self._rel(_plain(check))}
 
     def export_report(self, version_id: str) -> list:
         return [t for t in self.store.list_tasks(kind="export") if t["version_in"] == version_id]
@@ -855,29 +889,32 @@ class Hub:
         """
         from .. import collect as COL
 
-        items = [MDIO.load_any(str(u)) for u in uris]
-        got = COL.collect(items, Path(target), mode=mode, flatten=bool(flatten))
+        items = [MDIO.load_any(self.store.to_abs(u)) for u in uris]
+        got = COL.collect(items, Path(self.store.to_abs(target)), mode=mode,
+                          flatten=bool(flatten))
         self._invalidate_scans()      # move 模式会挪原件，copy 会给目标目录添新文件
-        return {"target": got.target, "mode": got.mode, "n_entries": len(got.entries),
-                "n_skipped": len(got.skipped), "n_created": len(got.created),
-                "manifest": str(got.manifest_path),
-                "entries": [{"src": e.src, "dst": e.dst} for e in got.entries[:200]]}
+        return self._rel({"target": got.target, "mode": got.mode,
+                          "n_entries": len(got.entries),
+                          "n_skipped": len(got.skipped), "n_created": len(got.created),
+                          "manifest": str(got.manifest_path),
+                          "entries": [{"src": e.src, "dst": e.dst}
+                                      for e in got.entries[:200]]})
 
     def collect_undo(self, manifest_path: str, keep_dirs: bool = True,
                      force: bool = False) -> dict:
         from .. import collect as COL
 
-        out = _plain(COL.undo(Path(manifest_path), keep_dirs=bool(keep_dirs),
-                              force=bool(force)))
+        out = self._rel(_plain(COL.undo(Path(self.store.to_abs(manifest_path)),
+                                        keep_dirs=bool(keep_dirs), force=bool(force))))
         self._invalidate_scans()
         return out
 
     def collect_latest(self, target) -> dict:
         from .. import collect as COL
 
-        found = COL.latest_manifest(Path(target))
-        return {"manifest": str(found) if found else "",
-                "exists": bool(found)}
+        found = COL.latest_manifest(Path(self.store.to_abs(target)))
+        return self._rel({"manifest": str(found) if found else "",
+                          "exists": bool(found)})
 
 
 def _inherit(store, from_version: str, to_version: str) -> int:

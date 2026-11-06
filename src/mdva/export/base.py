@@ -157,10 +157,16 @@ def _mask_for(item, root: Path) -> Optional[str]:
     return None
 
 
-def _resolve(uri: str, root: Optional[Path]):
+def _resolve(uri: str, root: Optional[Path], store=None):
+    """库内 uri -> 磁盘路径。显式给了 root 就按 root 拼（CLI 覆盖语义）；
+    否则相对 uri 按 D3 口径还原到工作区根（store.base），绝对路径原样放行。"""
     p = Path(uri)
-    if not p.is_absolute() and root:
-        p = root / p
+    if p.is_absolute():
+        return p
+    if root is not None:
+        return root / p
+    if store is not None:
+        return Path(store.to_abs(uri))
     return p
 
 
@@ -198,9 +204,12 @@ def load_dataset(store, version_id: str, states: Optional[Sequence[str]] = None,
         grouped.setdefault(key, []).append((ann, row))
 
     for (uri, index), pairs in sorted(grouped.items(), key=lambda kv: (str(kv[0][0]), kv[0][1])):
+        # D3：库内 uri 可能是相对工作区根的相对路径；导出层要真读真拷文件，
+        # 统一先还原为绝对路径（Sample.uri 与基线一致保持绝对，产物内容不变）
+        abs_uri = str(_resolve(uri, Path(root) if root else None, store))
         item = cache.get(uri, _MISS)
         if item is _MISS:
-            item = _load_item(_resolve(uri, base), ds.issues, uri)
+            item = _load_item(abs_uri, ds.issues, uri)
             cache[uri] = item
         pairs = sorted(pairs, key=lambda p: (p[0].geom, p[0].label, json.dumps(p[0].coords),
                                              p[1]["id"]))
@@ -224,7 +233,7 @@ def load_dataset(store, version_id: str, states: Optional[Sequence[str]] = None,
         if modalities and modality not in modalities:
             continue
         name = _sample_name(uri, index, modality)
-        sample = Sample(uri=str(uri), name=name, modality=modality, width=width, height=height,
+        sample = Sample(uri=abs_uri, name=name, modality=modality, width=width, height=height,
                         slice_index=int(index), t_ref=t_ref, t_end=t_end, anns=anns,
                         ann_meta=metas, item=item, meta={**meta, "states": states_})
         if item is not None and modality in SPATIAL and width:

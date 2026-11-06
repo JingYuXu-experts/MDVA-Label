@@ -275,7 +275,9 @@ def hard_examples(store, version_id: str, uris: Sequence[str], backend: str,
                   k: int = 10, params: Optional[dict] = None,
                   window: Optional[tuple] = None, workers: int = 0) -> dict:
     """难例回流：被驳回的、以及后端自己最没底的那几路，重新排队。"""
-    rejected = sorted({row["item_uri"] for row in store.list_annotations(version_id)
+    # D3：库内相对 uri 还原成绝对路径，和 uncertainty 排序（磁盘侧）同一口径
+    rejected = sorted({store.to_abs(row["item_uri"])
+                       for row in store.list_annotations(version_id)
                        if row["state"] == "rejected"})
     ranked = uncertainty(uris, backend, params, window, workers)
     pool = [{"uri": r["uri"], "score": r["score"], "why": r.get("reason", ""),

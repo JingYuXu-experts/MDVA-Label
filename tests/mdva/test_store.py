@@ -5,8 +5,10 @@
 """
 
 import hashlib
+import shutil
 import threading
 import time
+from pathlib import Path
 
 import pytest
 
@@ -157,7 +159,8 @@ def test_list_annotations_filters(store, ds):
     assert len(store.list_annotations(vid, item_uri="x/1.png")) == 2
     assert [d["ann"].geom for d in store.list_annotations(vid, state="submitted")] == ["point"]
     assert [d["item_uri"] for d in store.list_annotations(vid, source="preannotate")] == ["x/2.png"]
-    assert store.annotated_items(vid) == {"x/1.png", "x/2.png"}
+    # D3：annotated_items 面向磁盘访问，统一返回绝对路径；库内存的才是相对 uri
+    assert store.annotated_items(vid) == {store.to_abs("x/1.png"), store.to_abs("x/2.png")}
     assert store.get_annotation("a11111111111111") is None
 
 
@@ -378,3 +381,92 @@ def test_store_survives_worker_threads(tmp_path):
     assert len(s.list_annotations(vid)) == 120
     assert time.time() - t0 < 30
     s.close()
+
+
+# ---------------------------------------------------------------------- D3：相对 uri 与一次性迁移
+
+def test_d3_writes_store_relative_posix_and_reads_resolve(store, tmp_path):
+    """base 内的绝对路径入库必须变成 posix 相对 uri；读取口径还原为绝对路径。"""
+    did = store.create_dataset("迁移", "detection", tmp_path / "data")
+    vid = store.put_version(did, None, "init")
+    abs_uri = str(store.base / "data" / "cube" / "a.png")   # base=resolve 后的工作区根
+    store.put_annotation(vid, abs_uri, Ann("box", [0, 0, 1, 1], "flare"))
+    store.submit_many(vid, abs_uri, "annotator")           # 绝对/相对口径都要能命中同一行
+
+    rows = store.list_annotations(vid)
+    assert [r["item_uri"] for r in rows] == ["data/cube/a.png"]
+    assert len(store.list_annotations(vid, item_uri="data/cube/a.png")) == 1
+    assert len(store.list_annotations(vid, item_uri=abs_uri)) == 1
+    assert store.annotated_items(vid) == {abs_uri}          # 面向磁盘的口径是绝对路径
+    assert store.to_abs("data/cube/a.png") == abs_uri
+
+    raw_root = store.db.execute("SELECT root FROM dataset WHERE id=?", (did,)).fetchone()[0]
+    assert raw_root == "data"                               # root 同样相对化入库
+    assert store.get_dataset(did)["root"] == str(store.base / "data")
+    assert store.list_datasets()[0]["root"] == str(store.base / "data")
+
+
+def test_d3_uris_outside_base_stay_absolute(store, tmp_path):
+    """base 罩不住的路径（外挂盘/网络盘）原样存绝对——猜一个相对根只会指错地方。"""
+    outside = str(tmp_path.parent / "别处" / f"out_{tmp_path.name}.png")
+    did = store.create_dataset("外挂", "mixed", tmp_path.parent / "别处")
+    vid = store.put_version(did, None, "init")
+    store.put_annotation(vid, outside, Ann("box", [0, 0, 1, 1], "x"))
+
+    rows = store.list_annotations(vid)
+    assert rows[0]["item_uri"] == outside
+    assert store.annotated_items(vid) == {outside}
+    assert store.to_abs(outside) == outside
+    assert len(store.list_annotations(vid, item_uri=outside)) == 1
+
+
+def test_d3_legacy_absolute_db_is_migrated_and_readable(tmp_path):
+    """旧库（v1，全绝对路径）重开即自动迁移到 v2，且迁移前后数据一条不少。"""
+    s = Store(tmp_path / "mdva.sqlite")
+    did = s.create_dataset("老库", "detection", tmp_path / "data")
+    vid = s.put_version(did, None, "init")
+    abs_uri = str(s.base / "data" / "a.png")
+    s.put_annotation(vid, abs_uri, Ann("box", [1, 2, 3, 4], "flare"))
+    s.submit_many(vid, abs_uri, "annotator")               # 顺带在 review 表留痕
+    n_ann, n_rev = len(s.list_annotations(vid)), len(s.review_log(version_id=vid))
+    assert n_ann == 1 and n_rev >= 1
+
+    # 还原成"迁移前"的样子：uri/root 全绝对，schema 停在 v1
+    with s.db:
+        for table in ("annotation", "review"):
+            s.db.execute(f"UPDATE {table} SET item_uri=?", (abs_uri,))
+        s.db.execute("UPDATE dataset SET root=?", (str(tmp_path / "data"),))
+        s.db.execute("PRAGMA user_version=1")
+    s.close()
+
+    again = Store(tmp_path / "mdva.sqlite")                # 重开 = 跑一次性迁移
+    assert again.db.execute("PRAGMA user_version").fetchone()[0] == SCHEMA_VERSION == 2
+    assert len(again.list_annotations(vid)) == n_ann        # 旧库可读，一条不丢
+    assert len(again.review_log(version_id=vid)) == n_rev
+    assert again.list_annotations(vid)[0]["item_uri"] == "data/a.png"
+    assert again.review_log(version_id=vid)[0]["item_uri"] == "data/a.png"
+    assert again.annotated_items(vid) == {abs_uri}
+    assert again.get_dataset(did)["root"] == str(s.base / "data")
+    assert len(again.list_annotations(vid, item_uri=abs_uri)) == 1   # 旧调用方传绝对路径仍命中
+    again.close()
+
+
+def test_d3_copied_workspace_still_resolves_files(tmp_path):
+    """整个工作区目录拷走（换盘符/换机器）后，标注仍能定位到数据文件。"""
+    ws = tmp_path / "工作区"
+    (ws / "data").mkdir(parents=True)
+    (ws / "data" / "a.png").write_bytes(b"\x89PNG fake")
+    s = Store(ws / "mdva.sqlite")
+    did = s.create_dataset("便携", "detection", ws / "data")
+    vid = s.put_version(did, None, "init")
+    s.put_annotation(vid, str(ws / "data" / "a.png"), Ann("box", [0, 0, 1, 1], "flare"))
+    s.close()
+
+    moved = tmp_path / "搬走之后" / "工作区"
+    shutil.copytree(ws, moved)
+    t = Store(moved / "mdva.sqlite")
+    (uri,) = t.annotated_items(vid)
+    assert Path(uri).is_file() and Path(uri) == t.base / "data" / "a.png"
+    assert t.get_dataset(did)["root"] == str(t.base / "data")
+    assert len(t.list_annotations(vid, item_uri=uri)) == 1
+    t.close()

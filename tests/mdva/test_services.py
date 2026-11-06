@@ -251,7 +251,8 @@ def test_items_are_disk_union_annotated_in_every_state(hub_ws):
     disk = {r["uri"] for r in hub.items(did, vid)}
     assert disk and all(r["n_annotations"] == 0 for r in hub.items(did, vid))
 
-    target = str(data / "image_field.fits")
+    # D3：items() 与磁盘扫描现在统一给相对工作区根的 uri，比对口径随之取相对
+    target = hub.store.to_rel(str(data / "image_field.fits"))
     hub.put_annotations(vid, target,
                         [{"geom": "box", "coords": [20, 30, 80, 90], "label": "耀斑区"}],
                         role="annotator")
@@ -406,7 +407,8 @@ def test_active_round_ranks_by_uncertainty(hub_ws):
     out = hub.active_round(vid, uris, {"backend": "dynamic_threshold", "budget": 1,
                                       "backend_params": {"nsigma": 3.0}})
     assert out["budget"] == 1 and out["chosen"]
-    assert out["ranked"][0]["uri"] == uris[0]
+    # D3：API 负载里的 uri 是相对工作区根的形式（前端原样回传即可命中）
+    assert out["ranked"][0]["uri"] == hub.store.to_rel(uris[0])
     assert isinstance(out["advice"], str)
 
 
@@ -473,7 +475,8 @@ def test_export_writes_training_scripts(hub_ws):
                         [{"geom": "box", "coords": [20, 30, 80, 90], "label": "耀斑区"}],
                         role="annotator")
     report = hub.export(vid, "yolo", {}, make_scripts=True)
-    out = Path(report["out_dir"])
+    # D3：负载里的 out_dir 已相对化，读产物前先还原（原样回传 export_validate 已由上一用例覆盖）
+    out = Path(hub.store.to_abs(report["out_dir"]))
     assert (out / "train.py").is_file() and (out / "DATASET.md").is_file()
     assert "https://" not in (out / "train.py").read_text(encoding="utf-8")
 

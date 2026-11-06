@@ -169,7 +169,8 @@ def test_fresh_dataset_lists_disk_items_and_marks_progress(stack):
     # 列表 = 磁盘 ∪ 已标注：落一条标注不许把未标注文件挤出管理台
     assert len(after) == len(items)
     assert sum(1 for r in after if r["n_annotations"] == 0) == len(items) - 1
-    row = rows[str(data / "image_field.fits")]
+    # D3：绝对 uri 入库、列表原样回传的是相对工作区根的 posix 路径（前端拿到什么回什么）
+    row = rows[(data / "image_field.fits").relative_to(root).as_posix()]
     assert row["n_annotations"] == 1 and row["states"]["draft"] == 1
     assert row["machine_only"] is False and row["labels"] == ["耀斑区"]
     stats = get(ws, "/stats", dataset=fresh["dataset_id"])
@@ -351,7 +352,8 @@ def test_augment_recipe_check_run_lineage_replay(stack):
                                        "author": "徐靖宇"})
     assert report["summary"]["n_generated"] == 1
     lineage = get(ws, "/augment/lineage", version=report["version_id"])["lineage"]
-    assert lineage[0]["source"] == scene and lineage[0]["chain"]
+    # D3：谱系负载里的 uri/source 已相对化（前端原样展示/回传即可）
+    assert lineage[0]["source"] == Path(scene).relative_to(root).as_posix() and lineage[0]["chain"]
     assert post(ws, "/augment/replay", {"version": report["version_id"]})["identical"] is True
     assert post(ws, "/augment/suggest", {"dataset": did})["recipe"]["ops"]
 
@@ -368,7 +370,8 @@ def test_export_validate_and_report(stack):
     assert {"name", "schema"} <= set(formats["formats"][0])
     report = post(ws, "/export", {"version": vid, "format": "coco",
                                   "params": {"split_ratios": "0.6/0.2/0.2", "seed": 1}})
-    assert report["n_annotations"] >= 1 and Path(report["out_dir"]).is_dir()
+    # D3：out_dir 相对工作区根返回；下面 export_validate 原样回传该相对值（往返即契约）
+    assert report["n_annotations"] >= 1 and Path(root, report["out_dir"]).is_dir()
     check = post(ws, "/export/validate", {"version": vid, "dir": report["out_dir"]})
     assert check["ok"] is True, check["summary"]
     assert get(ws, "/export/report", version=vid)["reports"]
@@ -403,7 +406,9 @@ def test_version_lineage_diff_and_queue(stack):
     submitted = post(ws, "/annotations/submit", {"version": vid, "uri": draft,
                                                  "role": "annotator"})
     assert submitted["n_submitted"] >= 1
-    assert draft in get(ws, "/queue", version=vid, role="reviewer")["queue"]
+    # D3：待办队列负载给相对 uri（绝对 draft 作为入参仍可命中，见上一行）
+    assert Path(draft).relative_to(root).as_posix() in get(ws, "/queue", version=vid,
+                                                           role="reviewer")["queue"]
     bulk = post(ws, "/annotations/review", {"version": vid, "role": "reviewer",
                                            "action": "approve"})
     assert bulk["n"] >= 1 and bulk["action"] == "approve"
@@ -506,6 +511,15 @@ def test_live_serves_frontend_and_refuses_traversal(live):
     assert status == 405                                        # 静态目录不可写
     status, heads, _ = http("OPTIONS", live.port, "/api/annotations")
     assert status == 204 and "POST" in heads["Access-Control-Allow-Methods"]
+
+
+def test_live_other_methods_get_405_json(live):
+    """DEV-01（契约核对 v1.2）：PUT/DELETE/PATCH 必须回 405 JSON，而不是 stdlib 的 501 HTML。"""
+    for method in ("PUT", "DELETE", "PATCH"):
+        status, heads, raw = http(method, live.port, "/api/items")
+        assert status == 405, method
+        assert "json" in heads.get("Content-Type", ""), method
+        assert "GET/POST" in json.loads(raw)["error"], method
 
 
 def test_live_stays_consistent_under_scrubbing(live):

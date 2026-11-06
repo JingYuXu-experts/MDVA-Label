@@ -322,8 +322,9 @@ def test_run_mask_labels_survive_the_chain(store, field):
         out = np.asarray(Image.open(rec["aux"]["mask"]["written"]))
         assert sorted(np.unique(out).tolist()) == sorted(np.unique(src).tolist()), \
             "掩膜类别编号不能因为增强多出或缺少数值"
+        # D3：库内 uri 为相对路径，rec["written"] 是引擎侧绝对路径，比对前先归一
         ann = [r["ann"] for r in s.list_annotations(report["version"])
-               if r["item_uri"] == rec["written"]][0]
+               if r["item_uri"] == s.to_rel(rec["written"])][0]
         ys, xs = np.nonzero(out)
         assert ann.coords == [float(xs.min()), float(ys.min()),
                              float(xs.max()) + 1, float(ys.max()) + 1], \
@@ -375,7 +376,9 @@ def test_run_series_shifts_the_interval_annotation(store, telemetry):
     rec = report["written"][0]
     dt = float(rec["chain"][0]["params"]["dt"])
     t_ref = float(io.load_any(telemetry).t_ref)
-    rows = [r for r in s.list_annotations(report["version"]) if r["item_uri"] == rec["written"]]
+    # D3：库内 uri 为相对路径，rec["written"] 是引擎侧绝对路径，比对前先归一
+    rows = [r for r in s.list_annotations(report["version"])
+            if r["item_uri"] == s.to_rel(rec["written"])]
     assert rows[0]["ann"].coords == [pytest.approx(t_ref + 100.0 + dt),
                                      pytest.approx(t_ref + 160.0 + dt)]
 
