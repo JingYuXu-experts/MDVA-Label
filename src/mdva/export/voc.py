@@ -100,7 +100,7 @@ def _poly_text(ring) -> str:
 def export_voc(store, version_id, out_dir, split_ratios="0.7/0.15/0.15", seed=0,
                include_masks=False, states=None, min_confidence=None, only_labels=None,
                root=None, **_ignored) -> dict:
-    from .split import plan_split, summary, write_split_files
+    from .split import plan_split, provenance, summary, write_split_files
 
     ds = load_dataset(store, version_id, states=states, min_confidence=min_confidence,
                       only_labels=only_labels, root=root)
@@ -134,6 +134,7 @@ def export_voc(store, version_id, out_dir, split_ratios="0.7/0.15/0.15", seed=0,
         "spatial_annotations": sum(len(s.anns) for s in samples),
         "n_skipped": len(skipped), "skipped": skipped,
         "split": summary(assignment), "split_files": counts,
+        "split_provenance": provenance(ds),        # REQ-W17 可见判据
     })
     return report
 

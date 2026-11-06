@@ -321,6 +321,72 @@ def test_split_keeps_slices_of_one_stack_in_the_same_fold(env):
     assert uneven["counts"].get("val", 0) == 0
 
 
+def test_content_duplicates_always_land_on_the_same_side(env, tmp_path):
+    """REQ-W17 核心断言：逐字节相同、命名毫无关系的副本不许一张进 train、
+    一张进 val——同源泄漏造成的指标虚高就是要封死的东西。多 seed 下都同侧，
+    且 yolo/coco/voc 三张报告都带可见判据（split_provenance）。"""
+    s = env.store
+    droot = env.tmp / "dupset"
+    droot.mkdir()
+    blob = Path(env.scenes[0]).read_bytes()
+    dup_names = ["lonely_alpha.png", "zeta_other.png", "mid_gamma.png"]
+    for n in dup_names:
+        (droot / n).write_bytes(blob)
+    rgb, gt, _c = DS.segmentation_scene(size=96, seed=77)
+    Image.fromarray(rgb).save(droot / "different_delta.png")
+
+    did = s.create_dataset("重复陷阱集", "detection", droot)
+    vid2 = s.put_version(did, None, "init")
+    for n in dup_names + ["different_delta.png"]:
+        s.put_annotation(vid2, str(droot / n), Ann("box", [8, 10, 60, 55], "blob",
+                                                  source="manual", confidence=1.0))
+
+    ds = EXP.load_dataset(s, vid2)
+    by_file = {Path(x.uri).name: x.name for x in ds.samples}
+    trio = [by_file[n] for n in dup_names]
+    for seed in (0, 1, 2, 7, 13, 42):
+        assign = EXP.split.plan_split(ds, seed=seed)
+        assert len({assign[t] for t in trio}) == 1, f"seed={seed} 三份逐字节副本被拆开"
+
+    for fmt in ("yolo", "coco", "voc"):
+        d = tmp_path / f"prov_{fmt}"
+        rep = EXP.export(s, vid2, fmt, str(d), seed=3)
+        prov = rep["split_provenance"]
+        assert prov["content_aware"] is True
+        assert prov["n_content_groups"] == 1 and prov["n_files_in_content_groups"] == 3
+
+
+def test_unique_size_files_are_never_opened_for_hashing(env, monkeypatch):
+    """W13 形态限定的成本闸：size 唯一的文件连 sha 都不该算——
+    分组判据不能把每次导出变成全量重读；同指纹的热轮必须真正零读盘。"""
+    from mdva.export import content as CT
+
+    hashed: list = []
+    real_sha = CT._file_sha
+    monkeypatch.setattr(CT, "_file_sha",
+                        lambda fp: (hashed.append(fp[0]), real_sha(fp))[1])
+    CT._sha_cache.clear()
+    uris = [str(env.stack), str(env.series), str(env.events)]     # 三者大小互不相同
+    assert CT.content_map(uris) == {}
+    assert hashed == []                                          # 连哈希都不尝试
+
+    pair_b = env.tmp / "pair_b.png"
+    pair_b.write_bytes(Path(env.scenes[0]).read_bytes())          # 同 size 同内容的副本
+    opened: list = []
+    true_open = open
+    monkeypatch.setattr(CT, "open",
+                        lambda f, *a, **kw: (opened.append(str(f)), true_open(f, *a, **kw))[1],
+                        raising=False)          # open 是内建名，模块全局里本无此属性
+    uris_d = [str(env.scenes[0]), str(pair_b)]
+    first = CT.content_map(uris_d)
+    assert len(first) == 2 and first[uris_d[0]] == first[uris_d[1]]
+    assert len(opened) == 2                                      # 冷一轮：读两次盘
+    opened.clear()
+    again = CT.content_map(uris_d)
+    assert again == first and opened == []                        # 热一轮：真正零 IO
+    CT._sha_cache.clear()
+
+
 def test_split_rejects_bad_ratios(env):
     ds = EXP.load_dataset(env.store, env.version)
     with pytest.raises(ValueError):

@@ -51,7 +51,7 @@ def _quote(value) -> str:
 def export_yolo(store, version_id, out_dir, task="detect", split_ratios="0.7/0.15/0.15",
                 seed=0, include_background=False, include_masks=False, states=None,
                 min_confidence=None, only_labels=None, root=None, **_ignored) -> dict:
-    from .split import plan_split, summary
+    from .split import plan_split, provenance, summary
 
     if task not in ("detect", "segment"):
         raise ValueError(f"未知任务 {task!r}，可用 detect / segment")
@@ -106,6 +106,7 @@ def export_yolo(store, version_id, out_dir, task="detect", split_ratios="0.7/0.1
         "n_annotations": lines_total, "spatial_annotations": sum(len(s.anns) for s in samples),
         "n_skipped": len(skipped), "skipped": skipped,
         "n_categories": len(ds.categories), "split": summary(assignment),
+        "split_provenance": provenance(ds),        # REQ-W17 可见判据
     })
     return report
 
