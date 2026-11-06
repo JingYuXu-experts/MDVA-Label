@@ -7,7 +7,7 @@ MDVA 自有版本线，起始于 2026-11-06（此前内容与本版本线无关�
 
 ### 平台
 - 六层本地引擎：多模态接入（图像/立方体/遥测时序/事件/视频）、渲染、分析算子、
-  标注状态机、清洗、增强（seed 谱系可逐字节重放）、导出（COCO/YOLO/VOC/多模态 JSON）。
+  标注状态机、清洗、增强（seed 谱系落库，复现校验为参数链逐条一致）、导出（COCO/YOLO/VOC/多模态 JSON）。
 - 本地 Web 标注平台：只绑 127.0.0.1，完全离线，数据不出机器；六视图
   （管理台/标注画布/清洗/增强/导出/后端算法）。
 - CLI `mdva`：datasets / scan / render / analyze / clean / augment / export / bench / serve。
