@@ -3,7 +3,8 @@
  * V3 清洗 `/clean`（UI规格 §5.3）：左 280 算子面板 / 中央预览 / 右 320 执行与回退。
  * 作用范围 = 当前数据集+版本的条目全集（与 /api/items 同源，不另设筛选）。
  */
-import { computed, onBeforeUnmount, onMounted, watch } from 'vue'
+import { ref, computed, onBeforeUnmount, onMounted, watch } from 'vue'
+import ScopePicker from '@/components/layout/ScopePicker.vue'
 import OpPanel from '@/components/clean/OpPanel.vue'
 import PreviewPane from '@/components/clean/PreviewPane.vue'
 import ExecPanel from '@/components/clean/ExecPanel.vue'
@@ -16,7 +17,8 @@ const store = useCleanStore()
 const ctx = useCtxStore()
 const items = useItemsStore()
 
-const scopeUris = computed(() => items.items.map(i => i.uri))
+const scopeUris = ref<string[]>([])
+function onScope(uris: string[]) { scopeUris.value = uris; store.setScope(uris) }
 const currentVersion = computed(() => ctx.versions.find(v => v.id === ctx.version) || null)
 /** 只有清洗产出的版本才谈得上"丢弃明细/回退"；判据来自版本 op，不由前端猜 */
 const isCleanVersion = computed(() => String(currentVersion.value?.op || '').startsWith('clean'))
@@ -32,7 +34,6 @@ async function syncScope() {
   store.datasetId = ctx.dataset
   if (!ctx.dataset || !ctx.version) { store.setScope([]); return }
   await items.fetchItems()
-  store.setScope(scopeUris.value)
   await Promise.all([store.loadDropped(ctx.version, isCleanVersion.value), store.loadHistory()])
 }
 
@@ -40,6 +41,7 @@ watch(() => [ctx.dataset, ctx.version], () => { void syncScope() }, { immediate:
 </script>
 
 <template>
+  <div class="clean-wrapper"><ScopePicker @change="onScope" />
   <div class="clean" :data-scope="scopeUris.length">
     <OpPanel />
     <PreviewPane v-if="scopeUris.length" />
@@ -49,10 +51,11 @@ watch(() => [ctx.dataset, ctx.version], () => { void syncScope() }, { immediate:
       text="当前版本没有可选条目：先在管理台建集或切换到有数据的版本"
     />
     <ExecPanel />
-  </div>
+  </div></div>
 </template>
 
 <style scoped>
+.clean-wrapper {flex:1;min-height:0;display:flex;flex-direction:column;}
 .clean { flex: 1; min-height: 0; display: flex; align-items: stretch; background: var(--bg-base); }
 .clean__noscope { flex: 1; border-right: 1px solid var(--border); }
 </style>

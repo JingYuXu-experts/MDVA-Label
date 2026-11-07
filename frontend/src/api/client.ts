@@ -48,9 +48,12 @@ function sessionToken(): string {
   return w.__MDVA_TOKEN__ || ''
 }
 
+let workspaceProvider: () => string = () => ''
+export function setWorkspaceProvider(provider: () => string) { workspaceProvider = provider }
+
 /** 查询串序列化：数组 → JSON 数组文本（禁逗号拼接），对象 → JSON */
 export function buildQuery(query?: Record<string, unknown>): string {
-  if (!query) return ''
+  query = { ws: workspaceProvider(), ...(query || {}) }
   const parts: string[] = []
   for (const [key, value] of Object.entries(query)) {
     if (value === undefined || value === null || value === '') continue

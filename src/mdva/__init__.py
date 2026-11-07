@@ -4,7 +4,7 @@
 分层：io(L1) -> render(L2) -> analysis/pipeline(L3)。
 """
 
-__version__ = "0.1.0"
+__version__ = "0.1.1"
 
 from .core.model import (
     DataItem,

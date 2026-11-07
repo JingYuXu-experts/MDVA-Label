@@ -33,7 +33,7 @@ def dominant_label(sample: Sample) -> str:
 
 def _name_key(sample: Sample) -> str:
     """第一/三级键：显式 meta.group 优先，其次文件名前缀（既有行为）。"""
-    g = sample.meta.get("group") if sample.meta else None
+    g = (sample.meta.get("group") or sample.meta.get('source_group')) if sample.meta else None
     return str(g) if g else group_key(sample.uri)
 
 
@@ -85,6 +85,9 @@ def plan_split(ds: Dataset, ratios: Sequence[float] = (0.7, 0.15, 0.15), seed: i
     total_ratio = float(sum(ratios))
     if total_ratio <= 0:
         raise ValueError("ratios 之和必须大于 0")
+    import math
+    if any(not math.isfinite(float(r)) or r < 0 for r in ratios):
+        raise ValueError('划分比例必须为有限的非负数')
     weights = [r / total_ratio for r in ratios]
 
     samples = list(ds.samples)
@@ -109,10 +112,10 @@ def plan_split(ds: Dataset, ratios: Sequence[float] = (0.7, 0.15, 0.15), seed: i
         counts[fixed[name]] += 1
     total = len(samples) or 1
 
-    keys = sorted(buckets, key=lambda k: (dominant_label(buckets[k][0]) if stratify else "",
-                                          -len(buckets[k]), k))
-    if not stratify:
-        random.Random(seed).shuffle(keys)
+    keys = sorted(buckets)
+    random.Random(seed).shuffle(keys)
+    if stratify:
+        keys.sort(key=lambda k: (dominant_label(buckets[k][0]), -len(buckets[k])))
 
     assigned: dict = dict(fixed)
     for key in keys:

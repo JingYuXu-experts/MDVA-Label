@@ -7,17 +7,17 @@ import { useCanvasStore } from '@/stores/canvas'
 const store = useCanvasStore()
 
 const STRETCH_OPTIONS = [
-  { value: 'linear', label: 'linear' },
-  { value: 'sqrt', label: 'sqrt' },
-  { value: 'power', label: 'power' },
-  { value: 'gamma', label: 'gamma' },
-  { value: 'log', label: 'log' },
-  { value: 'asinh', label: 'asinh' },
-  { value: 'histeq', label: 'histeq' },
-  { value: 'clahe', label: 'clahe' },
+  { value: 'linear', label: '线性' },
+  { value: 'sqrt', label: '平方根' },
+  { value: 'power', label: '幂变换' },
+  { value: 'gamma', label: '伽马' },
+  { value: 'log', label: '对数' },
+  { value: 'asinh', label: '反双曲正弦' },
+  { value: 'histeq', label: '直方图均衡' },
+  { value: 'clahe', label: '局部对比度' },
 ]
 const COLORMAP_OPTIONS = [
-  { value: 'gray', label: 'gray' },
+  { value: 'gray', label: '灰度' },
   { value: 'viridis', label: 'viridis' },
   { value: 'inferno', label: 'inferno' },
   { value: 'plasma', label: 'plasma' },
@@ -131,7 +131,7 @@ const ticks = computed(() => {
             :format="fmtIndex" @update:model-value="store.setParam('index', $event)" />
         </span>
       </template>
-      <span class="lbl">stretch</span>
+      <span class="lbl">拉伸</span>
       <MSelect :model-value="store.frameParams.stretch ?? 'linear'" :options="STRETCH_OPTIONS" width="104px"
         @update:model-value="store.setParam('stretch', String($event))" />
       <template v-if="isCube">
@@ -139,7 +139,7 @@ const ticks = computed(() => {
         <MSelect :model-value="store.frameParams.colormap ?? 'gray'" :options="COLORMAP_OPTIONS" width="96px"
           @update:model-value="store.setParam('colormap', String($event))" />
       </template>
-      <span class="lbl">gamma</span>
+      <span class="lbl">伽马</span>
       <span class="slider-wrap">
         <MSlider :model-value="store.frameParams.gamma ?? 1" :min="0.1" :max="2" :step="0.05" :format="fmt2"
           @update:model-value="store.setParam('gamma', $event)" />

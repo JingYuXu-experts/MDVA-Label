@@ -440,7 +440,7 @@ def test_d3_legacy_absolute_db_is_migrated_and_readable(tmp_path):
     s.close()
 
     again = Store(tmp_path / "mdva.sqlite")                # 重开 = 跑一次性迁移
-    assert again.db.execute("PRAGMA user_version").fetchone()[0] == SCHEMA_VERSION == 2
+    assert again.db.execute("PRAGMA user_version").fetchone()[0] == SCHEMA_VERSION == 3
     assert len(again.list_annotations(vid)) == n_ann        # 旧库可读，一条不丢
     assert len(again.review_log(version_id=vid)) == n_rev
     assert again.list_annotations(vid)[0]["item_uri"] == "data/a.png"

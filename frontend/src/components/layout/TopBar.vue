@@ -20,17 +20,17 @@ const NAV = [
   { to: '/clean', label: '清洗' },
   { to: '/augment', label: '增强' },
   { to: '/export', label: '导出' },
-  { to: '/backends', label: '后端' },
+  { to: '/backends', label: '算法' },
 ]
 
 const ROLE_OPTIONS: { value: Role; label: string }[] = [
-  { value: 'admin', label: 'admin' },
-  { value: 'annotator', label: 'annotator' },
-  { value: 'reviewer', label: 'reviewer' },
+  { value: 'admin', label: '管理员' },
+  { value: 'annotator', label: '标注员' },
+  { value: 'reviewer', label: '审核员' },
 ]
 
 const wsOptions = computed(() =>
-  ctx.workspaces.map(w => ({ value: w.name, label: w.name })))
+  ctx.workspaces.map(w => ({ value: w.ws, label: w.ws === "." ? "默认工作区" : w.ws })))
 
 const datasetOptions = computed(() =>
   ctx.datasets.map(d => ({ value: d.id, label: d.name, hint: d.type })))
@@ -178,4 +178,5 @@ async function onRescan() {
 }
 .healthpop__line { margin: 0 0 var(--sp-1); font-size: var(--fs-xs); color: var(--text-secondary); word-break: break-all; }
 .healthpop__line.is-error { color: var(--danger); }
+@media (max-width: 1100px) { .topbar { height:auto; min-height:40px; flex-wrap:wrap; padding-top:6px; padding-bottom:6px; } .topbar__ctx { order:3; flex-basis:100%; } }
 </style>

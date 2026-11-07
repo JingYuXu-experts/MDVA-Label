@@ -13,6 +13,7 @@ import { useExportStore } from '@/stores/export'
 
 const props = defineProps<{ skip?: string[] }>()
 const store = useExportStore()
+const PARAM_CN: Record<string,string> = {annotation_source:'标注来源',task:'任务类型',polygons_as_boxes:'多边形派生检测框',include_masks:'附带编号掩膜',include_background:'保留背景样本',states:'审核状态',only_labels:'类别筛选',min_confidence:'最低置信度',images_dir:'图像子目录',segmentation:'附带分割轮廓',max_rows:'最大行数'}
 
 const entries = () => Object.entries(store.schema || {})
   .filter(([k]) => !(props.skip || []).includes(k)) as [string, OpParamSpec][]
@@ -54,12 +55,12 @@ function hint(s: OpParamSpec): string {
 <template>
   <div class="pform" data-testid="params-form">
     <div v-for="[key, spec] in entries()" :key="key" class="pform__row">
-      <span class="pform__name" :title="spec.description || key">{{ key }}</span>
+      <span class="pform__name" :title="spec.description || key">{{ PARAM_CN[key] || key }}</span>
 
       <MSelect
         v-if="isEnum(spec)"
         :model-value="String(store.params[key]?.value ?? spec.default ?? '')"
-        :options="(spec.enum || []).map(v => ({ value: v, label: v }))"
+        :options="(spec.enum || []).map(v => ({ value: v, label: key === 'annotation_source' ? (v === 'original' ? '原始实例掩膜（精确像素）' : '当前人工标注') : v }))"
         :width="'180px'"
         :aria-label="`${store.chosen} ${key}`"
         @update:model-value="store.setParam(key, String($event), String($event))"
@@ -68,14 +69,14 @@ function hint(s: OpParamSpec): string {
       <MSwitch
         v-else-if="spec.type === 'boolean' && !isOptional(spec)"
         :model-value="Boolean(store.params[key]?.value)"
-        :label="key"
+        :label="PARAM_CN[key] || key"
         @update:model-value="store.setParam(key, Boolean($event), String($event))"
       />
 
       <MSwitch
         v-else-if="spec.type === 'boolean'"
         :model-value="String(store.params[key]?.text ?? '') === 'true'"
-        :label="key"
+        :label="PARAM_CN[key] || key"
         @update:model-value="store.setParam(key, Boolean($event), $event ? 'true' : '')"
       />
 

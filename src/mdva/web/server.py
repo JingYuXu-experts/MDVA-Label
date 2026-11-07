@@ -203,15 +203,19 @@ class ApiHandler(BaseHTTPRequestHandler):
                             "Cache-Control": API_CACHE}, _dump(payload))
 
     def _send(self, status: int, headers: dict, body: bytes, head_only: bool = False) -> None:
-        self.send_response(status)
-        for key, value in headers.items():
-            self.send_header(key, value)
-        if status != 204:          # 204 按规范不能有正文，连长度都不报
-            self.send_header("Content-Length", str(len(body or b"")))
-        self.end_headers()
-        # HEAD 报的是"GET 会给多少字节"，所以正文按 head_only 决定写不写
-        if body and status != 204 and not head_only:
-            self.wfile.write(body)
+        try:
+            self.send_response(status)
+            for key, value in headers.items():
+                self.send_header(key, value)
+            if status != 204:          # 204 按规范不能有正文，连长度都不报
+                self.send_header("Content-Length", str(len(body or b"")))
+            self.end_headers()
+            # HEAD 报的是"GET 会给多少字节"，所以正文按 head_only 决定写不写
+            if body and status != 204 and not head_only:
+                self.wfile.write(body)
+
+        except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError):
+            self.close_connection = True  # The client stopped waiting; task records remain intact.
 
     def log_message(self, fmt: str, *args) -> None:
         if self.verbose:
@@ -245,6 +249,16 @@ def _build_hint(static_dir: str) -> str:
         "<p>只想改前端边看边调：<code>npm run dev</code>，它会把 /api 代理到本服务。</p>")
 
 
+class LocalHTTPServer(ThreadingHTTPServer):
+    def server_bind(self):
+        # Windows SO_REUSEADDR permits two live listeners on the same address.
+        # Exclusive binding makes the identity/reuse check below reliable.
+        if hasattr(socket, 'SO_EXCLUSIVEADDRUSE'):
+            self.allow_reuse_address = False
+            self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE, 1)
+        super().server_bind()
+
+
 def make_server(workspaces, host: str = "127.0.0.1", port: int = 8765,
                 static_dir=None, verbose: bool = False,
                 allow_remote: bool = False) -> ThreadingHTTPServer:
@@ -257,7 +271,7 @@ def make_server(workspaces, host: str = "127.0.0.1", port: int = 8765,
     if not is_loopback(host) and not allow_remote:
         # 数据集可能是别人的科研数据，默认绝不监听对外地址
         raise ValueError(f"拒绝在非回环地址 {host} 上监听；确实要放开请带 --allow-remote")
-    httpd = ThreadingHTTPServer((host, int(port)), handler)
+    httpd = LocalHTTPServer((host, int(port)), handler)
     httpd.daemon_threads = True
     httpd.mdva_workspaces = ws
     return httpd
@@ -265,7 +279,7 @@ def make_server(workspaces, host: str = "127.0.0.1", port: int = 8765,
 
 def serve(workspaces, host: str = "127.0.0.1", port: int = 8765, static_dir=None,
           verbose: bool = False, open_browser: bool = False,
-          allow_remote: bool = False) -> int:
+          allow_remote: bool = False, reuse: bool = False) -> int:
     """阻塞式启动（命令行用）。返回进程退出码。"""
     if not is_loopback(host) and not allow_remote:
         print(f"注意：{host} 不是回环地址，整个数据集会暴露在这个网卡上。"
@@ -274,6 +288,11 @@ def serve(workspaces, host: str = "127.0.0.1", port: int = 8765, static_dir=None
     try:
         httpd = make_server(workspaces, host, port, static_dir, verbose, allow_remote)
     except OSError as exc:
+        if reuse and host == '127.0.0.1' and _reuse_service(workspaces, int(port)):
+            if open_browser:
+                _open(f'http://127.0.0.1:{int(port)}/')
+            print('已打开同一工作区的现有网页服务')
+            return 0
         print(f"起不来：{exc}（端口 {port} 大概被占了，加 --port 换一个）")
         return 1
     shown = f"http://{host}:{httpd.server_address[1]}"
@@ -289,6 +308,28 @@ def serve(workspaces, host: str = "127.0.0.1", port: int = 8765, static_dir=None
         httpd.server_close()
         httpd.mdva_workspaces.close()
     return 0
+
+
+def _reuse_service(workspaces, port):
+    """Probe only a literal loopback address; never contact another host."""
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as conn:
+            conn.settimeout(2)
+            conn.connect(('127.0.0.1', port))
+            conn.sendall(b'GET /api/health HTTP/1.0\r\nHost: 127.0.0.1\r\n\r\n')
+            chunks = bytearray()
+            while len(chunks) < 65536:
+                block = conn.recv(4096)
+                if not block:
+                    break
+                chunks.extend(block)
+        info = json.loads(bytes(chunks).split(b'\r\n\r\n', 1)[1])
+        return (info.get('app') == 'mdva' and info.get('revision') == 'web-ssafd-1'
+                and Path(info.get('root', '')).resolve() == workspaces.root
+                and Path(info.get('out_dir', '')).resolve() == workspaces.hub().out_dir.resolve()
+                and set(workspaces.sources) <= set(info.get('sources', [])))
+    except (OSError, ValueError, IndexError):
+        return False
 
 
 def _open(url: str) -> None:

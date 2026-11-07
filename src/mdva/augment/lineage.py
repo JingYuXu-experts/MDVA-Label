@@ -208,13 +208,26 @@ def _discover_mask(item) -> Optional[str]:
 def _read_mask(path):
     from PIL import Image
 
+    if Path(path).suffix.lower() == '.npy':
+        return np.asarray(np.load(path, allow_pickle=False))
     return np.asarray(Image.open(str(path)))
 
 
 # ---------------------------------------------------------------------- 执行
 
-def run(store, version_id: str, recipe, out_dir=None, uris=None,
-        masks: Optional[dict] = None, author: str = "") -> dict:
+def run(store, version_id, recipe, out_dir=None, uris=None, masks=None, author=''):
+    version = store.get_version(version_id)
+    if not version: raise KeyError('未知版本')
+    task = store.create_task('augment', version['dataset_id'], version_id)
+    try:
+        return _run(store, version_id, recipe, out_dir, uris, masks, author, task)
+    except Exception as exc:
+        store.update_task(task, 'failed', {'error': str(exc)})
+        raise
+
+
+def _run(store, version_id: str, recipe, out_dir=None, uris=None,
+        masks: Optional[dict] = None, author: str = "", task_id=None) -> dict:
     """执行增强：产新版本、写新文件、把标注按链映射过去。原件与父版本一律不动。"""
     recipe = Recipe.from_obj(recipe)
     version = store.get_version(version_id)
@@ -248,7 +261,7 @@ def run(store, version_id: str, recipe, out_dir=None, uris=None,
                "n_series": sum(1 for r in written if r["modality"] == Modality.SERIES.value),
                "n_files": len(written) + len(aux)}
 
-    task = store.create_task("augment", version["dataset_id"], version_id, new_version,
+    task = task_id or store.create_task("augment", version["dataset_id"], version_id, new_version,
                              {"recipe": recipe.to_json()})
     report = {"version": new_version, "parent": version_id, "recipe": recipe.to_json(),
               "out_dir": str(out_root), "written": written, "summary": summary,

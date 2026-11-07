@@ -12,8 +12,8 @@ export interface HealthResp {
 }
 
 export interface WorkspaceRow {
-  name: string
-  root?: string
+  ws: string
+  dir: string
   datasets?: DatasetRow[]
   [key: string]: unknown
 }

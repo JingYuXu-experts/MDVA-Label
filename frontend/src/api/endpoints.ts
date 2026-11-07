@@ -51,10 +51,9 @@ export const scanRoot = (root: string, recursive = true, limit = 2000,
   signal?: AbortSignal) =>
   get<ScanResp>('/scan', { root, recursive, limit }, { signal })
 export const getItems = (dataset: string, version: string,
-  filter: { state?: string; modality?: string } = {}, signal?: AbortSignal) =>
-  get<{ items: ItemRow[]; n: number }>('/items',
-    { dataset, version, state: filter.state ?? '', modality: filter.modality ?? '' },
-    { signal })
+  filter: { state?: string; modality?: string; search?: string; category?: string; page?: number; page_size?: number } = {}, signal?: AbortSignal) =>
+  get<{ items: ItemRow[]; n: number; total: number; page: number; counts: Record<string, number>; modalities: string[] }>('/items',
+    { dataset, version, ...filter, page: filter.page ?? 1, page_size: filter.page_size ?? 120 }, { signal })
 export const getStats = (dataset: string, version: string) =>
   get<StatsResp>('/stats', { dataset, version })
 
@@ -182,3 +181,7 @@ export const smartActiveRound = (version: string, uris: string[], params: Record
   post<Record<string, unknown>>('/smart/active_round', { version, uris, ...params })
 export const smartHistory = (version: string) =>
   get<{ rounds: Record<string, unknown>[] }>('/smart/history', { version })
+
+export const referenceOverlayUrl = (uri: string, width: number, height: number, instance = 0) => `/api/reference/overlay${buildQuery({uri,width,height,instance})}`
+
+export const newVersion = (dataset: string, parent: string, op = "manual", params: Record<string, unknown> = {}, carry = true) => post<{version_id:string}>("/version", {dataset,parent,op,params,carry})

@@ -180,7 +180,7 @@ def load_fits(uri: str, hdul_index: Optional[int] = None, title: Optional[str] =
         header = _flatten_header(hdu.header)
         data = hdu.data
         if data is None:
-            raise ValueError(f"{uri} 的 HDU[{idx}] 没有数据")
+            raise ValueError('该 FITS 没有可用的像元图像；表格型 FITS 请先转为 CSV 时序，图像请提供单波段 2D FITS 或图像立方')
         arr = np.asarray(data)
         shape, dtype = arr.shape, str(arr.dtype)
 

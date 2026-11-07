@@ -30,10 +30,12 @@ def _polygon_area(coords) -> float:
 def _captured(sample) -> str:
     if sample.t_ref is None:
         return ""
-    return dt.datetime.utcfromtimestamp(sample.t_ref).strftime(TIME_FORMAT)
+    return dt.datetime.fromtimestamp(sample.t_ref, tz=dt.timezone.utc).strftime(TIME_FORMAT)
 
 
 @register("coco", "COCO instances 检测/分割格式（box + poly）", {
+    'annotation_source': {'type': 'string', 'default': 'current', 'enum': ['current', 'original'],
+                          'description': 'current=当前人工标注；original=原始实例掩膜（精确像素 RLE 与派生检测框）'},
     "images_dir": {"type": "string", "default": "images", "description": "图片子目录"},
     "split_ratios": {"type": "string", "default": "0.7/0.15/0.15",
                      "description": "train/val/test 比例"},
@@ -102,7 +104,7 @@ def export_coco(store, version_id, out_dir, images_dir="images", split_ratios="0
         fold_names[fold] = {"images": len(fold_images), "annotations": len(fold_anns)}
 
     report = write_report(out, ds, "coco", {
-        "images_dir": images_dir, "split_ratios": split_ratios, "seed": seed,
+        "annotation_source": "current", "images_dir": images_dir, "split_ratios": split_ratios, "seed": seed,
         "segmentation": segmentation, "include_masks": include_masks, "states": states,
         "min_confidence": min_confidence, "only_labels": only_labels}, {
         "files": [str(Path(f).name) for f in files],
@@ -151,12 +153,15 @@ def _annotation(ann, sample, placed, cat_ids: dict, issues: list):
                  "segmentation": [[x, y, x + bw, y, x + bw, y + bh, x, y + bh]]}, None)
     if ann.geom == "poly":
         rings = polygon_rings(ann, w, h)
-        xs, ys = ann.coords[0::2], ann.coords[1::2]
+        if not rings or len(rings[0]) < 6:
+            return None, '多边形裁切后没有面积'
+        coords = rings[0]
+        xs, ys = coords[0::2], coords[1::2]
         x0, y0, x1, y1 = min(xs), min(ys), max(xs), max(ys)
         if x1 - x0 < 1.0 or y1 - y0 < 1.0:
             return None, "多边形退化"
         return ({**common, "bbox": [round(v, 3) for v in (x0, y0, x1 - x0, y1 - y0)],
-                 "area": round(_polygon_area(ann.coords), 3), "segmentation": rings}, None)
+                 "area": round(_polygon_area(coords), 3), "segmentation": rings}, None)
     if ann.geom == "point":
         return None, "COCO instances 不表示点"
     return None, "时间类几何不属于图像标注"

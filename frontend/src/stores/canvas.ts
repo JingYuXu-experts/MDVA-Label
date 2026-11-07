@@ -98,6 +98,10 @@ export const useCanvasStore = defineStore('canvas', () => {
 
   // ---- 当前条目与视图 ----
   const currentUri = ref('')
+  const referenceShown = ref(false)
+  const referenceOpacity = ref(0.4)
+  const referenceInstance = ref(0)
+  let loadGeneration = 0
   const modality = ref('')
   const frameW = ref(960)
   const frameH = ref(540)
@@ -304,13 +308,16 @@ export const useCanvasStore = defineStore('canvas', () => {
   // ---- 载入/保存 ----
   async function openItem(uri: string): Promise<void> {
     if (!ctx.version) return
+    const run = ++loadGeneration
+    const version = ctx.version
     loading.value = true
     try {
       currentUri.value = uri
       const [resp, meta] = await Promise.all([
-        api.getAnnotations(ctx.version, uri),
+        api.getAnnotations(version, uri),
         api.getFrameMeta(uri, { width: frameW.value, height: frameH.value }),
       ])
+      if (run !== loadGeneration || version !== ctx.version) return
       modality.value = String(meta.modality || '')
       if (meta.width) frameW.value = Number(meta.width)
       if (meta.height) frameH.value = Number(meta.height)
@@ -340,7 +347,7 @@ export const useCanvasStore = defineStore('canvas', () => {
       dirty.value = false
       selId.value = null
     } finally {
-      loading.value = false
+      if (run === loadGeneration) loading.value = false
     }
   }
 
@@ -358,7 +365,14 @@ export const useCanvasStore = defineStore('canvas', () => {
         confidence: a.confidence, level: a.level, slice: a.slice, note: a.note,
         color: a.color,
       }))
-      const resp = await api.putAnnotations(ctx.version, currentUri.value, payload, ctx.role, 'draft', true)
+      const uri = currentUri.value
+      let version = ctx.version
+      if (ctx.versions.find(v => v.id === version)?.op === 'import') {
+        const working = await api.newVersion(ctx.dataset, version)
+        version = working.version_id
+      }
+      const resp = await api.putAnnotations(version, uri, payload, ctx.role, 'draft', true)
+      if (version !== ctx.version) { await ctx.loadVersions(); ctx.setVersion(version, true) }
       // 回填后端 id：按提交顺序对应（replace=true 全删重写）
       const { annotations } = await api.getAnnotations(resp.version_id, currentUri.value)
       const bySig = new Map<string, AnnRow>()
@@ -434,7 +448,7 @@ export const useCanvasStore = defineStore('canvas', () => {
         smartAppliedVersion.value = newVid
         useToast().success(`已落新版本（人工标注已保留并 carry）；撤销按钮绑定 version_id=${newVid.slice(0, 8)}…`)
         // 切到新版本刷新：ctx.setVersion 触发整体重载
-        ctx.setVersion(newVid)
+        ctx.setVersion(newVid, true)
         await openItem(currentUri.value)
         return true
       }
@@ -472,6 +486,7 @@ export const useCanvasStore = defineStore('canvas', () => {
   }
 
   function reset(): void {
+    loadGeneration += 1
     currentUri.value = ''
     modality.value = ''
     fit.value = null
@@ -490,7 +505,7 @@ export const useCanvasStore = defineStore('canvas', () => {
   }
 
   return {
-    currentUri, modality, frameW, frameH, frameParams, zoom, loadingFrame,
+    referenceShown, referenceOpacity, referenceInstance, currentUri, modality, frameW, frameH, frameParams, zoom, loadingFrame,
     fit, plotBox, srcW, srcH, contentRect, toCanvasX, toCanvasY, toNativeX, toNativeY,
     nativeW, nativeH, nativeShown, nativeText,
     tRef, tEnd, channels, nViews, isTimeModality, timeSpan,

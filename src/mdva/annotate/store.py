@@ -11,13 +11,15 @@ import sqlite3
 import threading
 import time
 import uuid
+from functools import wraps
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Iterable, Optional
 
 from . import state as ST
 from .model import Ann
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 
 _DDL = """
 CREATE TABLE IF NOT EXISTS dataset(
@@ -59,6 +61,16 @@ CREATE INDEX IF NOT EXISTS idx_ann_version ON annotation(version_id, item_uri);
 CREATE INDEX IF NOT EXISTS idx_version_dataset ON version(dataset_id, created);
 CREATE INDEX IF NOT EXISTS idx_task_dataset ON task(dataset_id, kind);
 CREATE INDEX IF NOT EXISTS idx_review_target ON review(version_id, annotation_id);
+
+CREATE TABLE IF NOT EXISTS source_mount(
+  id TEXT PRIMARY KEY, root TEXT NOT NULL, read_only INTEGER NOT NULL DEFAULT 1);
+CREATE TABLE IF NOT EXISTS sample_index(
+  dataset_id TEXT NOT NULL, uri TEXT NOT NULL, category TEXT NOT NULL,
+  mask_uri TEXT, width INTEGER, height INTEGER, payload TEXT NOT NULL,
+  PRIMARY KEY(dataset_id, uri));
+CREATE INDEX IF NOT EXISTS idx_sample_dataset ON sample_index(dataset_id, category);
+CREATE TABLE IF NOT EXISTS import_scan(
+  id TEXT PRIMARY KEY, source_id TEXT NOT NULL, created REAL NOT NULL, payload TEXT NOT NULL);
 """
 
 def _migrate_v1_noop(store: "Store") -> None:
@@ -92,7 +104,7 @@ def _migrate_v2_relative_uri(store: "Store") -> None:
 
 
 #: 迁移列表：`user_version` 从 n 升到 n+1 就跑 `_MIGRATIONS[n]`。毕设规模不上 alembic。
-_MIGRATIONS: list = [_migrate_v1_noop, _migrate_v2_relative_uri]
+_MIGRATIONS: list = [_migrate_v1_noop, _migrate_v2_relative_uri, _migrate_v1_noop]
 
 
 def _new_id(prefix: str = "") -> str:
@@ -115,6 +127,15 @@ def _loads(text, default=None):
         return json.loads(text)
     except json.JSONDecodeError:
         return default
+
+
+def synchronized(method):
+    """Lock the shared SQLite connection through validation, execution and fetch."""
+    @wraps(method)
+    def locked(self, *args, **kwargs):
+        with self._lock:
+            return method(self, *args, **kwargs)
+    return locked
 
 
 def _unique_roots(candidates: Iterable) -> tuple:
@@ -151,18 +172,93 @@ class Store:
         #: 否则 CLI `--out`/`--out-root`、两个建包脚本、D3 的绝对 uri 用例会一起变红，
         #: 而那条承诺讲的本来就不是"命令行只能写工作区"）。
         self.roots = _unique_roots((self.base, *extra_roots))
+        self.source_roots = {}
         # FastAPI 在线程池里跑同步 handler，连接必须跨线程复用 -> 一把全局写锁
         self._lock = threading.RLock()
+        self._transaction_depth = 0
         self.db = sqlite3.connect(str(self.path), check_same_thread=False)
         self.db.row_factory = sqlite3.Row
         self.db.execute("PRAGMA journal_mode=WAL")
         self.db.execute("PRAGMA foreign_keys=ON")
         self.init()
+        self.source_roots = {r['id']: Path(r['root']).resolve()
+                             for r in self.db.execute('SELECT * FROM source_mount').fetchall()}
+        self.roots = _unique_roots((*self.roots, *self.source_roots.values()))
+
+    @synchronized
+    def register_source(self, name, root):
+        """Only the startup/CLI may register roots; HTTP accepts the ID only."""
+        import re
+        if not re.fullmatch(r'[A-Za-z0-9_-]+', name):
+            raise ValueError('数据源名称仅允许字母、数字、下划线和短横线')
+        root = Path(root).resolve(strict=True)
+        if not root.is_dir() or root == self.base or root in self.base.parents or self.base in root.parents:
+            raise ValueError('只读数据源必须是独立于工作区的目录')
+        with self.db:
+            self.db.execute('INSERT INTO source_mount(id,root) VALUES(?,?) ON CONFLICT(id) DO UPDATE SET root=excluded.root',
+                            (name, str(root)))
+        self.source_roots[name] = root
+        self.roots = _unique_roots((*self.roots, root))
+
+    @synchronized
+    def indexed_items(self, dataset_id):
+        return [json.loads(r['payload']) for r in self.db.execute(
+            'SELECT payload FROM sample_index WHERE dataset_id=? ORDER BY uri', (dataset_id,)).fetchall()]
+
+    @synchronized
+    def indexed_count(self, dataset_id):
+        return self.db.execute('SELECT COUNT(*) FROM sample_index WHERE dataset_id=?',(dataset_id,)).fetchone()[0]
+
+    @synchronized
+    def indexed_item(self, uri):
+        row = self.db.execute('SELECT payload FROM sample_index WHERE uri=? LIMIT 1', (self.to_rel(uri),)).fetchone()
+        return json.loads(row['payload']) if row else None
+
+    @contextmanager
+    def transaction(self):
+        with self._lock:
+            outer = self._transaction_depth == 0
+            self._transaction_depth += 1
+            try:
+                if outer:
+                    with self.db:
+                        yield
+                else:
+                    yield
+            finally:
+                self._transaction_depth -= 1
+
+    @synchronized
+    def version_records(self, version_id):
+        version = self.get_version(version_id)
+        if not version:
+            raise KeyError('未知版本')
+        records = {r['uri']: r for r in self.indexed_items(version['dataset_id'])}
+        tasks = {t['version_out']: t for t in self.list_tasks(version['dataset_id']) if t['state'] == 'done'}
+        for ver in self.lineage(version_id):
+            report = (tasks.get(ver['id']) or {}).get('report') or {}
+            for uri in report.get('dropped') or []:
+                records.pop(self.to_rel(uri.get('uri') if isinstance(uri, dict) else uri), None)
+            for written in report.get('written') or []:
+                src, dst = self.to_rel(written['source']), self.to_rel(written['written'])
+                if src not in records:
+                    continue
+                source = records[src]
+                aux = (written.get('aux') or {}).get('mask') or {}
+                records[dst] = {**source, 'uri': dst, 'name': Path(dst).name,
+                                'width': written.get('width', source['width']),
+                                'height': written.get('height', source['height']),
+                                'mask_uri': self.to_rel(aux['written']) if aux else None,
+                                'derived_from': source.get('derived_from') or src}
+                if ver['op'] == 'clean':
+                    records.pop(src, None)
+        return sorted(records.values(), key=lambda r: r['uri'])
 
     # ------------------------------------------------------------------ 生命周期
 
+    @synchronized
     def init(self) -> None:
-        with self._lock, self.db:
+        with self.transaction():
             self.db.executescript(_DDL)
             version = int(self.db.execute("PRAGMA user_version").fetchone()[0])
             if version < SCHEMA_VERSION:
@@ -170,6 +266,7 @@ class Store:
                     step(self)
                 self.db.execute(f"PRAGMA user_version={SCHEMA_VERSION}")
 
+    @synchronized
     def close(self) -> None:
         with self._lock:
             self.db.close()
@@ -194,6 +291,11 @@ class Store:
         p = Path(text)
         if not p.is_absolute():
             return p.as_posix()
+        for name, root in self.source_roots.items():
+            try:
+                return '@' + name + '/' + p.resolve().relative_to(root).as_posix()
+            except ValueError:
+                pass
         try:
             return p.resolve().relative_to(self.base).as_posix()
         except (ValueError, OSError):
@@ -210,13 +312,16 @@ class Store:
            "实际会打开哪个文件"，判的是目标不是字符串长相——只比字符串前缀会被 `a/../b` 绕开。
         畸形到解析不动的路径按越界处理（宁可拒绝，也不往下 open）。
         """
-        p = Path(str(path or ""))
+        text = str(path or "").strip()
+        if not text or "\x00" in text:
+            raise OutsideWorkspace("路径无效：请提供工作区内的相对路径")
+        p = Path(self.to_abs(text))
         if not p.is_absolute():
             p = self.base / p
         try:
             resolved = p.resolve()
-        except (OSError, RuntimeError):
-            resolved = p
+        except (OSError, RuntimeError, ValueError):
+            raise OutsideWorkspace("路径无效：无法解析此路径") from None
         for root in self.roots:
             try:
                 resolved.relative_to(root)
@@ -230,6 +335,17 @@ class Store:
             f"接口只认工作区之内的 uri/root/target/out_dir；数据放在别的目录时，"
             f"启动时用 --data 或 --out 指向那个目录（请求参数不能自己声明根）")
 
+    def require_writable(self, path) -> Path:
+        resolved = self.require_within(path)
+        return self.require_not_source(resolved)
+
+    def require_not_source(self, path) -> Path:
+        resolved = Path(self.to_abs(path)).resolve()
+        for root in getattr(self, "source_roots", {}).values():
+            if resolved == root or root in resolved.parents or resolved in root.parents:
+                raise OutsideWorkspace("只读数据源：原始数据不能被写入、移动或删除，请选择独立输出目录")
+        return resolved
+
     def to_abs(self, uri) -> str:
         """文件访问前的还原：相对 uri 拼回工作区根，绝对 uri 原样交给引擎。
 
@@ -238,9 +354,18 @@ class Store:
         「绝对路径原样放行（旧库兼容）」这句注释此前被当成放行的理由——那是 REQ-W27 的洞，
         洞在**请求参数可以自带根**，不在引擎能解析绝对路径。
         """
-        text = str(uri or "")
+        text = str(uri or "").strip()
         if not text:
             return text
+        if text.startswith('@'):
+            name, _, relative = text[1:].replace('\\', '/').partition('/')
+            root = self.source_roots.get(name)
+            if root is None:
+                raise OutsideWorkspace('未知只读数据源，请在启动参数中登记')
+            resolved = (root / relative).resolve()
+            if resolved != root and root not in resolved.parents:
+                raise OutsideWorkspace('路径越界：数据源中的相对路径不能离开其根目录')
+            return str(resolved)
         p = Path(text)
         if p.is_absolute():
             return text
@@ -255,27 +380,31 @@ class Store:
 
     # ------------------------------------------------------------------ 数据集
 
+    @synchronized
     def create_dataset(self, name: str, type: str, root, meta: Optional[dict] = None) -> str:
         if type not in DATASET_TYPES:
             raise ValueError(f"未知数据集类型 {type!r}，可用 {DATASET_TYPES}")
         did = _new_id("ds")
-        with self._lock, self.db:
+        with self.transaction():
             self.db.execute(
                 "INSERT INTO dataset(id,name,type,root,created,meta) VALUES(?,?,?,?,?,?)",
                 (did, name, type, self.to_rel(Path(root).resolve()), time.time(),
                  json.dumps(meta or {}, ensure_ascii=False)))
         return did
 
+    @synchronized
     def get_dataset(self, dataset_id: str) -> Optional[dict]:
         row = self.db.execute("SELECT * FROM dataset WHERE id=?", (dataset_id,)).fetchone()
         return _row_dataset(row, self.base) if row else None
 
+    @synchronized
     def list_datasets(self) -> list[dict]:
         return [_row_dataset(r, self.base) for r in
                 self.db.execute("SELECT * FROM dataset ORDER BY created DESC")]
 
     # ------------------------------------------------------------------ 版本 DAG
 
+    @synchronized
     def put_version(self, dataset_id: str, parent_id: Optional[str], op: str,
                     params: Optional[dict] = None, stats: Optional[dict] = None) -> str:
         if self.get_dataset(dataset_id) is None:
@@ -283,7 +412,7 @@ class Store:
         if parent_id and self.get_version(parent_id) is None:
             raise KeyError(f"父版本 {parent_id} 不存在")
         vid = _new_id("v")
-        with self._lock, self.db:
+        with self.transaction():
             self.db.execute(
                 "INSERT INTO version(id,dataset_id,parent_id,op,params,created,stats) "
                 "VALUES(?,?,?,?,?,?,?)",
@@ -292,10 +421,12 @@ class Store:
                  json.dumps(stats or {}, ensure_ascii=False)))
         return vid
 
+    @synchronized
     def get_version(self, version_id: str) -> Optional[dict]:
         row = self.db.execute("SELECT * FROM version WHERE id=?", (version_id,)).fetchone()
         return _row_version(row) if row else None
 
+    @synchronized
     def list_versions(self, dataset_id: str) -> list[dict]:
         rows = self.db.execute(
             "SELECT * FROM version WHERE dataset_id=? ORDER BY created", (dataset_id,)).fetchall()
@@ -305,10 +436,12 @@ class Store:
             v["n_annotations"] = counts.get(v["id"], 0)
         return out
 
+    @synchronized
     def head_version(self, dataset_id: str) -> Optional[str]:
         rows = self.list_versions(dataset_id)
         return rows[-1]["id"] if rows else None
 
+    @synchronized
     def lineage(self, version_id: str) -> list[dict]:
         """从给定版本回溯到根，用于复现重放。"""
         out = []
@@ -320,6 +453,7 @@ class Store:
             cur = self.get_version(cur["parent_id"]) if cur["parent_id"] else None
         return list(reversed(out))
 
+    @synchronized
     def diff(self, v1: str, v2: str) -> dict:
         a = {self._key(r) for r in self._rows(v1)}
         b = {self._key(r) for r in self._rows(v2)}
@@ -331,11 +465,13 @@ class Store:
     def _key(row: sqlite3.Row) -> str:
         return f"{row['item_uri']}|{row['geom']}|{row['label']}|{row['coords']}"
 
+    @synchronized
     def _rows(self, version_id: str) -> list[sqlite3.Row]:
         return self.db.execute(
             "SELECT * FROM annotation WHERE version_id=? ORDER BY item_uri, id",
             (version_id,)).fetchall()
 
+    @synchronized
     def _annotation_counts(self, version_ids: list[str]) -> list[int]:
         if not version_ids:
             return []
@@ -348,6 +484,7 @@ class Store:
 
     # ------------------------------------------------------------------ 标签组
 
+    @synchronized
     def set_labels(self, dataset_id: str, labels: Iterable[dict]) -> None:
         """整体替换标签组。界面拖了顺序就是一次全量写，简单且原子。"""
         payload = [(dataset_id, l["name"], l.get("color", ""), l.get("hotkey", ""), i)
@@ -355,11 +492,12 @@ class Store:
         names = [p[1] for p in payload]
         if len(set(names)) != len(names):
             raise ValueError("标签名重复")
-        with self._lock, self.db:
+        with self.transaction():
             self.db.execute("DELETE FROM label WHERE dataset_id=?", (dataset_id,))
             self.db.executemany(
                 "INSERT INTO label(dataset_id,name,color,hotkey,ord) VALUES(?,?,?,?,?)", payload)
 
+    @synchronized
     def list_labels(self, dataset_id: str) -> list[dict]:
         rows = self.db.execute(
             "SELECT * FROM label WHERE dataset_id=? ORDER BY ord", (dataset_id,)).fetchall()
@@ -368,6 +506,7 @@ class Store:
 
     # ------------------------------------------------------------------ 标注
 
+    @synchronized
     def put_annotation(self, version_id: str, item_uri: str, ann: Ann,
                        role: str = "", state: str = "draft",
                        annotation_id: Optional[str] = None) -> str:
@@ -381,7 +520,7 @@ class Store:
                    ann.slice, int(ann.level),
                    json.dumps(list(ann.color)) if ann.color else None, ann.note,
                    state, role, time.time())
-        with self._lock, self.db:
+        with self.transaction():
             self.db.execute(
                 "INSERT INTO annotation(id,version_id,item_uri,geom,coords,label,source,"
                 "confidence,backend,slice,level,color,note,state,role,ts) "
@@ -393,10 +532,12 @@ class Store:
                 "role=excluded.role, ts=excluded.ts", payload)
         return aid
 
+    @synchronized
     def get_annotation(self, annotation_id: str) -> Optional[dict]:
         row = self.db.execute("SELECT * FROM annotation WHERE id=?", (annotation_id,)).fetchone()
         return _row_ann(row) if row else None
 
+    @synchronized
     def list_annotations(self, version_id: str, item_uri: Optional[str] = None,
                          state: Optional[str] = None, source: Optional[str] = None) -> list[dict]:
         sql, args = "SELECT * FROM annotation WHERE version_id=?", [version_id]
@@ -412,6 +553,7 @@ class Store:
         sql += " ORDER BY item_uri, id"
         return [_row_ann(r) for r in self.db.execute(sql, args)]
 
+    @synchronized
     def annotated_items(self, version_id: str) -> set:
         """有标注的数据项集合。返回**绝对路径**：调用方都拿它去磁盘定位文件，
         库里存的相对形式只是存储细节，不外泄给文件访问代码。"""
@@ -419,16 +561,18 @@ class Store:
                 self.db.execute("SELECT DISTINCT item_uri FROM annotation WHERE version_id=?",
                                 (version_id,))}
 
+    @synchronized
     def delete_annotation(self, annotation_id: str, role: str = "admin",
                           reason: str = "") -> bool:
         row = self.db.execute("SELECT * FROM annotation WHERE id=?", (annotation_id,)).fetchone()
         if row is None:
             return False
-        with self._lock, self.db:
+        with self.transaction():
             self.db.execute("DELETE FROM annotation WHERE id=?", (annotation_id,))
             self._log_review(row, role, "delete", row["state"], "deleted", reason)
         return True
 
+    @synchronized
     def set_state(self, annotation_id: str, role: str, action: str,
                   reason: str = "") -> str:
         """角色 + 当前状态决定能否迁移；任何迁移都写 review 留痕。"""
@@ -436,12 +580,13 @@ class Store:
         if row is None:
             raise KeyError(f"未知标注 {annotation_id}")
         target = ST.next_state(role, action, row["state"])
-        with self._lock, self.db:
+        with self.transaction():
             self.db.execute("UPDATE annotation SET state=?, role=?, ts=? WHERE id=?",
                             (target, role, time.time(), annotation_id))
             self._log_review(row, role, action, row["state"], target, reason)
         return target
 
+    @synchronized
     def submit_many(self, version_id: str, item_uri: str, role: str,
                     reason: str = "") -> int:
         ids = [r["id"] for r in self.db.execute(
@@ -455,6 +600,7 @@ class Store:
                 moved += 1
         return moved
 
+    @synchronized
     def review_bulk(self, version_id: str, role: str, action: str, reason: str = "",
                     max_confidence: Optional[float] = None) -> int:
         """按置信度批量验收：只动高置信的预标注，人工标的仍走逐条。"""
@@ -470,6 +616,7 @@ class Store:
                 moved += 1
         return moved
 
+    @synchronized
     def queue(self, version_id: str, role: str) -> list[str]:
         """该角色待办的样本（按 item_uri 聚合）。"""
         wanted = ST.queue_states(role)
@@ -481,6 +628,7 @@ class Store:
             f"AND state IN ({marks}) ORDER BY item_uri", [version_id, *wanted])
         return [r["item_uri"] for r in rows]
 
+    @synchronized
     def review_log(self, annotation_id: Optional[str] = None,
                    version_id: Optional[str] = None) -> list[dict]:
         sql, args = "SELECT * FROM review WHERE 1=1", []
@@ -497,6 +645,7 @@ class Store:
                  "from": r["from_state"], "to": r["to_state"], "reason": r["reason"],
                  "ts": r["ts"]} for r in self.db.execute(sql, args)]
 
+    @synchronized
     def _log_review(self, row, role, action, from_state, to_state, reason) -> None:
         self.db.execute(
             "INSERT INTO review(annotation_id,dataset_id,version_id,item_uri,role,action,"
@@ -504,6 +653,7 @@ class Store:
             (row["id"], _dataset_of_version(self.db, row["version_id"]), row["version_id"],
              row["item_uri"], role, action, from_state, to_state, reason, time.time()))
 
+    @synchronized
     def progress(self, version_id: str) -> dict:
         rows = self.db.execute(
             "SELECT state, COUNT(*) c FROM annotation WHERE version_id=? GROUP BY state",
@@ -514,6 +664,7 @@ class Store:
                 "approved": by_state.get("approved", 0),
                 "ratio": round(by_state.get("approved", 0) / total, 4) if total else 0.0}
 
+    @synchronized
     def label_counts(self, version_id: str) -> dict:
         rows = self.db.execute(
             "SELECT label, COUNT(*) c FROM annotation WHERE version_id=? GROUP BY label",
@@ -522,12 +673,13 @@ class Store:
 
     # ------------------------------------------------------------------ 任务
 
+    @synchronized
     def create_task(self, kind: str, dataset_id: Optional[str] = None,
                     version_in: Optional[str] = None, version_out: Optional[str] = None,
                     params: Optional[dict] = None) -> str:
         tid = _new_id("t")
         now = time.time()
-        with self._lock, self.db:
+        with self.transaction():
             self.db.execute(
                 "INSERT INTO task(id,dataset_id,version_in,version_out,kind,params,state,"
                 "report,created,updated) VALUES(?,?,?,?,?,?,?,?,?,?)",
@@ -535,15 +687,17 @@ class Store:
                  json.dumps(params or {}, ensure_ascii=False), "running", "{}", now, now))
         return tid
 
+    @synchronized
     def update_task(self, task_id: str, state: str, report: Optional[dict] = None,
                     version_out: Optional[str] = None) -> None:
-        with self._lock, self.db:
+        with self.transaction():
             self.db.execute(
                 "UPDATE task SET state=?, report=?, version_out=COALESCE(?,version_out), "
                 "updated=? WHERE id=?",
                 (state, json.dumps(report or {}, ensure_ascii=False), version_out,
                  time.time(), task_id))
 
+    @synchronized
     def get_task(self, task_id: str) -> Optional[dict]:
         row = self.db.execute("SELECT * FROM task WHERE id=?", (task_id,)).fetchone()
         if row is None:
@@ -554,6 +708,7 @@ class Store:
                 "report": _loads(row["report"], {}),
                 "created": row["created"], "updated": row["updated"]}
 
+    @synchronized
     def list_tasks(self, dataset_id: Optional[str] = None, kind: Optional[str] = None) -> list[dict]:
         sql, args = "SELECT id FROM task WHERE 1=1", []
         if dataset_id:
@@ -567,6 +722,7 @@ class Store:
 
     # ------------------------------------------------------------------ 谱系导出
 
+    @synchronized
     def export_manifest(self, dataset_id: str, write: bool = True) -> dict:
         ds = self.get_dataset(dataset_id)
         if ds is None:
@@ -576,7 +732,7 @@ class Store:
         order = _topo(versions, by_id)
         manifest = {
             "dataset": ds["name"], "dataset_id": dataset_id, "type": ds["type"],
-            "root": ds["root"], "labels": self.list_labels(dataset_id),
+            "root": self.to_rel(ds["root"]), "labels": self.list_labels(dataset_id),
             "versions": [{"id": v["id"], "parent": v["parent_id"], "op": v["op"],
                           "params": v["params"], "n_annotations": v["n_annotations"],
                           "created": v["created"]} for v in order],
@@ -585,6 +741,7 @@ class Store:
             "schema_version": SCHEMA_VERSION,
         }
         if write and ds["root"]:
+            self.require_writable(ds['root'])
             Path(ds["root"]).mkdir(parents=True, exist_ok=True)
             (Path(ds["root"]) / "manifest.json").write_text(
                 json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")

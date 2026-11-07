@@ -223,6 +223,8 @@ class Hub:
                 return cached
         item = MDIO.load_any(str(uri), modality=modality or None)
         with self._lock:
+            if key in self._loaded_order:
+                self._loaded_order.remove(key)
             self._loaded[key] = item
             self._loaded_order.append(key)
             while len(self._loaded_order) > ITEM_CACHE:
@@ -273,6 +275,7 @@ class Hub:
                 "id": ds["id"], "name": ds["name"], "type": ds["type"], "root": ds["root"],
                 "meta": ds.get("meta") or {}, "created": ds.get("created"),
                 "n_versions": len(versions), "head": head,
+                'n_items': self.store.indexed_count(ds['id']) if (ds.get('meta') or {}).get('indexed') else 0,
                 "n_annotations": int(ds.get("n_annotations") or 0),
                 "head_annotations": versions[-1]["n_annotations"] if versions else 0,
             })
@@ -318,7 +321,8 @@ class Hub:
 
     def head_version(self, dataset_id: str, version_id: str = "") -> str:
         if version_id:
-            if self.store.get_version(version_id) is None:
+            version = self.store.get_version(version_id)
+            if version is None or version['dataset_id'] != dataset_id:
                 raise KeyError(f"未知版本 {version_id}")
             return version_id
         versions = self.store.list_versions(dataset_id)
@@ -356,6 +360,44 @@ class Hub:
 
     # ------------------------------------------------------------------ 条目与进度
 
+    def items_page(self, dataset_id, version_id='', page=1, page_size=120,
+                   state='', modality='', search='', category=''):
+        page, page_size = max(1, int(page)), max(1, min(240, int(page_size)))
+        records = self.store.version_records(self.head_version(dataset_id, version_id))
+        if not records:
+            rows = self.items(dataset_id, version_id, modality=modality)
+        else:
+            grouped = {}
+            for ann in self.store.list_annotations(self.head_version(dataset_id, version_id)):
+                grouped.setdefault(ann['item_uri'], []).append(ann)
+            rows = []
+            for r in records:
+                anns = grouped.get(r['uri'], [])
+                rows.append({**r, 'n_annotations': len(anns),
+                             'states': {st: sum(a['state'] == st for a in anns) for st in ST.STATES},
+                             'sources': sorted({a['ann'].source for a in anns}),
+                             'labels': sorted({a['ann'].label for a in anns}),
+                             'machine_only': bool(anns) and all(a['ann'].source != 'manual' for a in anns)})
+        def bucket(row):
+            states = row['states']
+            if not row['n_annotations']: return 'unlabeled'
+            if states.get('draft') or states.get('rejected'): return 'draft'
+            if states.get('submitted'): return 'submitted'
+            return 'approved'
+        counts = dict.fromkeys(('', 'unlabeled', 'draft', 'submitted', 'approved'), 0)
+        for row in rows:
+            counts[''] += 1
+            counts[bucket(row)] += 1
+        modalities = sorted({row['modality'] for row in rows})
+        rows = [r for r in rows if (not state or bucket(r) == state)
+                and (not modality or r['modality'] == modality)
+                and (not search or search.lower() in r['uri'].lower())
+                and (not category or r.get('category') == category)]
+        total = len(rows)
+        page = min(page, max(1, (total + page_size - 1) // page_size))
+        return {'items': rows[(page-1)*page_size:page*page_size], 'n': total, 'total': total,
+                'page': page, 'page_size': page_size, 'counts': counts, 'modalities': modalities}
+
     def items(self, dataset_id: str, version_id: str = "", state: str = "",
               modality: str = "") -> list:
         version_id = self.head_version(dataset_id, version_id)
@@ -368,10 +410,12 @@ class Hub:
         # 必须是"磁盘 ∪ 已标注"：只标注过一条就把没标的文件挤出列表，
         # 用户就不知道还剩多少活了。已标注但磁盘上已不存在的条目也要保留，
         # 否则删文件会连带"删掉"标注记录在界面上的可见性。
-        uris = sorted(set(grouped) | set(self._disk_uris(dataset, "")))
+        disk = ([r['uri'] for r in self.store.version_records(version_id)]
+                if (dataset.get('meta') or {}).get('indexed') else self._disk_uris(dataset, ''))
+        uris = sorted(set(grouped) | set(disk))
         out = []
         for uri in uris:
-            kind = _safe_sniff(self.store.to_abs(uri))
+            kind = 'image' if (dataset.get('meta') or {}).get('indexed') else _safe_sniff(self.store.to_abs(uri))
             if modality and kind != modality:
                 continue
             anns = grouped.get(uri, [])
@@ -386,6 +430,9 @@ class Hub:
         return out
 
     def _disk_uris(self, dataset: dict, modality: str) -> list:
+        if (dataset.get('meta') or {}).get('indexed'):
+            return [r['uri'] for r in self.store.indexed_items(dataset['id'])
+                    if not modality or modality == 'image']
         root = self._dataset_root(dataset)
         if not root.is_dir():
             return []
@@ -468,6 +515,8 @@ class Hub:
     def _remember(self, key: str, body: dict) -> None:
         """只留最近 FRAME_CACHE 帧：缓存无限增长的话，拖动一次就把内存吃光了。"""
         with self._lock:
+            if key in self._frame_order:
+                self._frame_order.remove(key)
             self._frames[key] = body
             self._frame_order.append(key)
             while len(self._frame_order) > FRAME_CACHE:
@@ -640,27 +689,28 @@ class Hub:
         替换而不是逐条对账，是因为网页端提交的是"这一屏的最终结果"——
         对账要比较几何等价，界面反而更容易出错。
         """
-        ids = []
-        removed = 0
-        prepared = []
-        for payload in anns or []:
-            ann = payload["ann"] if isinstance(payload, dict) and "ann" in payload else payload
-            prepared.append(ann if isinstance(ann, Ann) else Ann.from_json(ann))
-        # REQ-W15：像素几何一律按条目 native 尺寸当场拒绝。越界框在下游是
-        # "同一份坏输入两种结局"：COCO 回读会报，YOLO/VOC 的 clamp 却把它裁成
-        # 看起来合法——静默归等于把数据损坏伪装成成功。写入点拦截是唯一收口。
-        self._check_pixel_bounds(uri, prepared)
-        if replace:
-            for row in self.store.list_annotations(version_id, uri):
-                if row["state"] in ("approved",):
-                    raise PermissionError(
-                        f"{uri} 有已通过的标注（{row['id']}），不许被整条替换；先驳回再改")
-                self.store.delete_annotation(row["id"], role or "admin", "replace")
-                removed += 1
-        for ann in prepared:
-            ids.append(self.store.put_annotation(version_id, uri, ann, role=role, state=state))
-        return {"version_id": version_id, "uri": uri, "ids": ids, "removed": removed,
-                "n": len(ids)}
+        with self.store.transaction():
+            ids = []
+            removed = 0
+            prepared = []
+            for payload in anns or []:
+                ann = payload["ann"] if isinstance(payload, dict) and "ann" in payload else payload
+                prepared.append(ann if isinstance(ann, Ann) else Ann.from_json(ann))
+            # REQ-W15：像素几何一律按条目 native 尺寸当场拒绝。越界框在下游是
+            # "同一份坏输入两种结局"：COCO 回读会报，YOLO/VOC 的 clamp 却把它裁成
+            # 看起来合法——静默归等于把数据损坏伪装成成功。写入点拦截是唯一收口。
+            self._check_pixel_bounds(uri, prepared)
+            if replace:
+                for row in self.store.list_annotations(version_id, uri):
+                    if row["state"] in ("approved",):
+                        raise PermissionError(
+                            f"{uri} 有已通过的标注（{row['id']}），不许被整条替换；先驳回再改")
+                    self.store.delete_annotation(row["id"], role or "admin", "replace")
+                    removed += 1
+            for ann in prepared:
+                ids.append(self.store.put_annotation(version_id, uri, ann, role=role, state=state))
+            return {"version_id": version_id, "uri": uri, "ids": ids, "removed": removed,
+                    "n": len(ids)}
 
     _PIXEL_GEOMS = ("box", "poly", "point")
     _BOUNDS_EPS = 1e-6          # 画布整像素映射的浮点噪声不该被当成越界
@@ -935,8 +985,11 @@ class Hub:
                     author: str = "") -> dict:
         from .. import augment as AUG
 
+        selected = self._abs(uris) or sorted(self.store.annotated_items(version_id))
+        masks = {self.store.to_abs(r['uri']): self.store.to_abs(r['mask_uri'])
+                 for r in self.store.version_records(version_id) if r.get('mask_uri')}
         report = AUG.run(self.store, version_id, AUG.Recipe.from_obj(recipe),
-                         out_dir=self.out_dir, uris=self._abs(uris) or None,
+                         out_dir=self.out_dir, uris=selected, masks=masks,
                          author=author)
         self._invalidate_scans()      # 增强写盘后条目列表要能看到新文件
         return self._rel(_plain({**report, "version_id": report["version"]}))
@@ -958,11 +1011,16 @@ class Hub:
                out_dir: str = "", make_scripts: bool = False) -> dict:
         from .. import export as EXP
 
+        # A fresh task directory per invocation prevents stale files from an older export.
+        import uuid
+        destination = out_dir or str(self.out_dir / 'export' / version_id / (fmt + '-' + uuid.uuid4().hex[:8]))
+        self.store.require_not_source(destination)
+
         # `out_dir` 是写侧参数，越界收口在请求边界（routes.guard_paths）做：
         # 这里保持"缺省落在 --out 之下"，进程内调用（CLI `mdva export --out`、建包脚本）
         # 仍然是启动参数的主人，不受这道边界影响（PM seq=752 裁定 1）。
         return self._rel(_plain(EXP.export(self.store, version_id, fmt,
-                                           out_dir=out_dir or str(self.out_dir / "export" / fmt),
+                                           out_dir=destination,
                                            make_scripts=bool(make_scripts), **(params or {}))))
 
     def export_validate(self, version_id: str, directory: str) -> dict:
@@ -987,6 +1045,10 @@ class Hub:
         """
         from .. import collect as COL
 
+        self.store.require_not_source(target)
+        if mode == 'move':
+            for uri in uris:
+                self.store.require_not_source(uri)
         items = [MDIO.load_any(self.store.to_abs(u)) for u in uris]
         got = COL.collect(items, Path(self.store.to_abs(target)), mode=mode,
                           flatten=bool(flatten))
@@ -999,11 +1061,12 @@ class Hub:
                                       for e in got.entries[:200]]})
 
     def collect_undo(self, manifest_path: str, keep_dirs: bool = True,
-                     force: bool = False) -> dict:
+                     force: bool = False, enforce_boundary: bool = False) -> dict:
         from .. import collect as COL
 
         out = self._rel(_plain(COL.undo(Path(self.store.to_abs(manifest_path)),
-                                        keep_dirs=bool(keep_dirs), force=bool(force))))
+                                        keep_dirs=bool(keep_dirs), force=bool(force),
+                                        validate=self.store.require_writable if enforce_boundary else self.store.require_not_source)))
         self._invalidate_scans()
         return out
 

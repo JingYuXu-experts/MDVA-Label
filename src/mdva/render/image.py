@@ -361,10 +361,12 @@ def save_array(path, arr: np.ndarray, stretch: bool = True) -> dict:
         out = to_uint8(a)
     else:
         finite = a[np.isfinite(a)] if a.dtype.kind in ("f", "c") else a
-        if finite.size and int(np.max(finite)) > 255:
-            raise ValueError(f"掩膜类别编号超出 uint8 范围（最大 {int(np.max(finite))}）")
-        out = np.rint(np.where(np.isfinite(a), a, 0.0)).astype(np.uint8) if a.dtype.kind == "f" \
-            else a.astype(np.uint8)
+        if finite.size and (np.min(finite) < 0 or np.max(finite) > 65535):
+            raise ValueError('掩膜实例编号超出 PNG 的 0–65535 范围，请使用 NPY 原始掩膜导出')
+        if a.dtype.kind == 'f' and (finite.size != a.size or np.any(finite != np.rint(finite))):
+            raise ValueError('掩膜含非整数或非有限实例编号，不能静默取整')
+        dtype = np.uint16 if finite.size and np.max(finite) > 255 else np.uint8
+        out = a.astype(dtype)
     img = Image.fromarray(np.ascontiguousarray(out))
     Path(path).parent.mkdir(parents=True, exist_ok=True)
     img.save(str(path))

@@ -58,7 +58,7 @@ const ratioStr = computed(() => String(store.payload[store.splitKey] ?? ''))
         @update:model-value="store.setSeed(Number($event))"
       />
       <p class="split__note">
-        分层键是"每张图出现最多的类别"，同组（同源序列/同一场景）不拆到不同折——这两条都由后端 split.plan_split 决定。
+        按主要类别分层；同源图像、重复内容及其增强副本保持在同一划分中。
       </p>
     </template>
 

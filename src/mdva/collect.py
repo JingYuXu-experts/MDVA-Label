@@ -52,7 +52,10 @@ class Collection:
     @classmethod
     def load(cls, path) -> "Collection":
         payload = json.loads(Path(path).read_text(encoding="utf-8"))
-        entries = [Entry(**e) for e in payload.get("entries", [])]
+        try:
+            entries = [Entry(**e) for e in payload.get("entries", [])]
+        except (TypeError, AttributeError) as exc:
+            raise ValueError('撤销清单格式无效：请使用平台生成的完整清单') from exc
         return cls(target=payload["target"], mode=payload["mode"],
                    started=payload.get("started", 0.0), entries=entries,
                    created=payload.get("created", []), skipped=payload.get("skipped", []))
@@ -169,7 +172,7 @@ def _dir_stamp(path: Path) -> Tuple[int, float]:
     return total, newest
 
 
-def undo(manifest, keep_dirs: bool = True, force: bool = False) -> dict:
+def undo(manifest, keep_dirs: bool = True, force: bool = False, validate=None) -> dict:
     """逆序回放一次整理操作：复制的删掉、移动的搬回原处。
 
     删之前核对大小与修改时间，对不上就说明那个文件不是本次放进去的（或已被改过），
@@ -178,6 +181,24 @@ def undo(manifest, keep_dirs: bool = True, force: bool = False) -> dict:
     p = Path(str(manifest))
     coll = (manifest if isinstance(manifest, Collection)
             else Collection.load(p if p.is_file() else p / MANIFEST_NAME))
+    if validate is not None:
+        # Validate the ENTIRE manifest before performing even one filesystem mutation.
+        target = validate(coll.target)
+        manifest_file = validate(coll.manifest_path)
+        if not isinstance(manifest, Collection) and p.resolve() != manifest_file:
+            raise ValueError("撤销清单的目标目录与清单位置不一致")
+        for entry in coll.entries:
+            if entry.action not in ("copy", "move"):
+                raise ValueError("撤销清单含未知操作")
+            dst = validate(entry.dst)
+            if target not in dst.parents:
+                raise ValueError("撤销清单的文件不在收录目标目录内")
+            if entry.action == "move":
+                validate(entry.src)
+        for directory in coll.created:
+            resolved = validate(directory)
+            if resolved != target and target not in resolved.parents:
+                raise ValueError("撤销清单的目录不在收录目标目录内")
     removed, restored, refused = 0, 0, 0
 
     for entry in reversed(coll.entries):
@@ -196,6 +217,9 @@ def undo(manifest, keep_dirs: bool = True, force: bool = False) -> dict:
                 refused += 1
                 continue
             src.parent.mkdir(parents=True, exist_ok=True)
+            if src.exists():
+                refused += 1
+                continue
             shutil.move(str(dst), str(src))
             restored += 1
 

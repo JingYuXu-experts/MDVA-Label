@@ -56,7 +56,8 @@ def crop_box(shape: tuple, fraction: float, ox: float = 0.0, oy: float = 0.0) ->
 
     `apply()` 和 `chain()` 都调这一个函数，所以界面预览里的裁剪框和落盘裁剪结果是同一个。
     """
-    h, w = int(shape[-2]), int(shape[-1])
+    from ..core.spatial import image_hw
+    h, w = image_hw(shape)
     frac = min(max(float(fraction), 1.0 / max(h, w)), 1.0)
     nw, nh = max(1, int(round(w * frac))), max(1, int(round(h * frac)))
     dx = int(round((w - nw) * 0.5 * float(ox)))
@@ -211,7 +212,7 @@ class Flip(Aug):
     def apply(self, arr, params) -> np.ndarray:
         a = np.asarray(arr)
         if params.get("horizontal"):
-            a = a[..., ::-1]                      # 最后一轴是 x（(H,W) 与 (H,W,C) 都成立）
+            a = a[:, ::-1, ...]                   # HWC colors and HW masks share spatial axes.
         if params.get("vertical"):
             a = a[::-1]
         return a
@@ -246,11 +247,13 @@ class Crop(Aug):
     def apply(self, arr, params) -> np.ndarray:
         a = np.asarray(arr)
         x0, y0, x1, y1 = crop_box(a.shape, params["fraction"], params["ox"], params["oy"])
-        return a[..., y0:y1, x0:x1]
+        return a[y0:y1, x0:x1, ...]
 
     def chain(self, params, shape) -> list:
         box = crop_box(shape, params["fraction"], params["ox"], params["oy"])
-        if tuple(box) == (0, 0, int(shape[-1]), int(shape[-2])):
+        from ..core.spatial import image_hw
+        h, w = image_hw(shape)
+        if tuple(box) == (0, 0, w, h):
             return []
         return [("crop", {"box": [int(v) for v in box]})]
 

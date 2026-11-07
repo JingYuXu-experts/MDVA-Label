@@ -48,9 +48,10 @@ def discover(root) -> list[dict]:
 class Workspaces:
     """Hub 的懒加载缓存：同一个 sqlite 文件只开一份连接与帧缓存。"""
 
-    def __init__(self, root, out_dir=None):
+    def __init__(self, root, out_dir=None, sources=None):
         self.root = Path(root).resolve()
         self.out_dir = Path(out_dir).resolve() if out_dir else None
+        self.sources = dict(sources or {})
         self._hubs: dict[str, Hub] = {}
         self._lock = threading.Lock()
         self._table: dict[str, dict] = {}
@@ -105,6 +106,8 @@ class Workspaces:
                 # 允许根在这里定齐（REQ-W27）：工作区 base（Store 自己算）+ `--out` + `--data` 根。
                 # 已登记的子工作区必然在 `--data` 根之内，所以不需要单独列举。
                 hub = Hub(row["db"], out_dir=self.out_dir, data_root=self.root)
+                for source_id, source_root in self.sources.items():
+                    hub.store.register_source(source_id, source_root)
                 self._hubs[name] = hub
             return hub
 
@@ -139,7 +142,8 @@ def resolve_dataset(hub: Hub, dataset: str = "") -> dict:
 def resolve_version(hub: Hub, dataset_id: str, version_id: str = "") -> str:
     """版本留空 = 该数据集最新一版；界面绝大多数请求都不带版本。"""
     if version_id:
-        if hub.store.get_version(version_id) is None:
+        version = hub.store.get_version(version_id)
+        if version is None or version['dataset_id'] != dataset_id:
             raise KeyError(f"未知版本 {version_id}")
         return version_id
     head = hub.head_version(dataset_id)

@@ -13,7 +13,7 @@
         "video"
       ],
       "stress": "高动态位深、跨模态时间联动、离散量语义",
-      "root": "C:\\Users\\Administrator\\AppData\\Local\\Temp\\mdva_dry_5395q609\\aerospace",
+      "root": "aerospace",
       "truth": {
         "injected_anomalies": {
           "Batt_Temp": {
@@ -612,7 +612,7 @@
         "image"
       ],
       "stress": "窗宽窗位、彩色帧、长时序尖峰保留",
-      "root": "C:\\Users\\Administrator\\AppData\\Local\\Temp\\mdva_dry_5395q609\\medical",
+      "root": "medical",
       "truth": {
         "ct": {
           "hu_intercept": -1024,
@@ -668,7 +668,7 @@
         "image"
       ],
       "stress": "多模型输出跨目录并行对比、批量算子、标注导出",
-      "root": "C:\\Users\\Administrator\\AppData\\Local\\Temp\\mdva_dry_5395q609\\cv_segmentation",
+      "root": "cv_segmentation",
       "truth": {
         "per_model": {
           "unet": {

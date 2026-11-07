@@ -79,7 +79,7 @@ watch(() => [ctx.dataset, ctx.version], () => {
       <StepBlock
         no="①"
         title="格式"
-        note="卡片与参数都来自 GET /api/export/formats 的元数据：后端加一种格式，界面自动多一张卡。"
+        note="选择需要的训练格式；原始掩膜请使用 COCO，并在标注来源中明确选择。"
         :done="!!store.chosen"
         :warn="store.chosen ? '' : '未选格式，导出不可用'"
         tone="neutral"

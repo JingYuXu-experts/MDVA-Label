@@ -7,6 +7,7 @@ import MButton from '@/components/ui/MButton.vue'
 import MDialog from '@/components/ui/MDialog.vue'
 import QueueRail from '@/components/canvas/QueueRail.vue'
 import CanvasToolbar from '@/components/canvas/CanvasToolbar.vue'
+import ReferenceBar from '@/components/canvas/ReferenceBar.vue'
 import CanvasStage from '@/components/canvas/CanvasStage.vue'
 import FrameParamBar from '@/components/canvas/FrameParamBar.vue'
 import AnnListPanel from '@/components/canvas/AnnListPanel.vue'
@@ -52,10 +53,12 @@ async function openUri(uri: string): Promise<void> {
 }
 
 onMounted(() => {
+  ctx.setContextGuard(() => !store.dirty || window.confirm('当前条目有未保存的修改。切换工作区、数据集或版本将放弃这些修改，仍要切换吗？'))
   window.addEventListener('keydown', onKey)
   window.addEventListener('beforeunload', onBeforeUnload)
 })
 onBeforeUnmount(() => {
+  ctx.setContextGuard(null)
   window.removeEventListener('keydown', onKey)
   window.removeEventListener('beforeunload', onBeforeUnload)
 })
@@ -84,11 +87,12 @@ async function bootstrap(): Promise<void> {
   bootstrapped = true
   applyOutSizeFromQuery()
   await Promise.all([ensureQueue(), loadLabels()])
-  const q = route.query.uri
+  const q = route.query.dataset === ctx.dataset ? route.query.uri : ''
   const target = typeof q === 'string' && q ? q
     : (store.currentUri || items.items[0]?.uri || '')
   if (target) await openUri(target)
 }
+watch(() => ctx.dataset, () => { bootstrapped = false; store.reset(); items.reset() })
 watch(() => [ctx.dataset, ctx.version], bootstrap, { immediate: true })
 
 // 版本切换 → 整体刷新（annotations/frame 按 version 取）
@@ -179,6 +183,7 @@ async function step(dir: number): Promise<void> {
       <QueueRail @pick="pickUri" />
       <div class="annotate__main">
         <CanvasToolbar :label-options="labelOptions" />
+        <ReferenceBar />
         <CanvasStage ref="stageRef" />
         <FrameParamBar />
       </div>

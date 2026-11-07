@@ -39,6 +39,8 @@ def _quote(value) -> str:
 
 @register("yolo", "YOLO 目录式数据集（detect / segment）", {
     "task": {"type": "string", "enum": ["detect", "segment"], "default": "detect"},
+    'polygons_as_boxes': {'type': 'boolean', 'default': False,
+                          'description': '检测任务：把人工多边形的外接框作为检测框导出'},
     "split_ratios": {"type": "string", "default": "0.7/0.15/0.15"},
     "seed": {"type": "integer", "default": 0},
     "include_background": {"type": "boolean", "default": False,
@@ -50,7 +52,7 @@ def _quote(value) -> str:
 })
 def export_yolo(store, version_id, out_dir, task="detect", split_ratios="0.7/0.15/0.15",
                 seed=0, include_background=False, include_masks=False, states=None,
-                min_confidence=None, only_labels=None, root=None, **_ignored) -> dict:
+                min_confidence=None, only_labels=None, root=None, polygons_as_boxes=False, **_ignored) -> dict:
     from .split import plan_split, provenance, summary
 
     if task not in ("detect", "segment"):
@@ -69,10 +71,13 @@ def export_yolo(store, version_id, out_dir, task="detect", split_ratios="0.7/0.1
     lines_total = 0
     for sample in samples:
         fold = assignment.get(sample.name, FOLDS[0])
+        rows = _label_lines(sample, {'width':sample.width,'height':sample.height}, cat_ids, task, ds.issues, skipped,
+                            polygons_as_boxes=polygons_as_boxes)
+        if not rows and not include_background:
+            continue
         placed = write_sample_image(sample, out / "images" / fold)
         if include_masks:
             write_sample_mask(sample, out / "masks" / fold)
-        rows = _label_lines(sample, placed, cat_ids, task, ds.issues, skipped)
         label_dir = out / "labels" / fold
         label_dir.mkdir(parents=True, exist_ok=True)
         stem = Path(placed["file_name"]).stem
@@ -98,6 +103,7 @@ def export_yolo(store, version_id, out_dir, task="detect", split_ratios="0.7/0.1
 
     report = write_report(out, ds, "yolo", {
         "task": task, "split_ratios": split_ratios, "seed": seed,
+        'polygons_as_boxes': polygons_as_boxes,
         "include_background": include_background, "include_masks": include_masks,
         "states": states, "min_confidence": min_confidence, "only_labels": only_labels}, {
         "files": ["data.yaml"],
@@ -111,7 +117,7 @@ def export_yolo(store, version_id, out_dir, task="detect", split_ratios="0.7/0.1
     return report
 
 
-def _label_lines(sample, placed, cat_ids: dict, task: str, issues: list, skipped: list):
+def _label_lines(sample, placed, cat_ids: dict, task: str, issues: list, skipped: list, polygons_as_boxes=False):
     w, h = int(placed["width"]), int(placed["height"])
     rows = []
     for ann in sample.anns:
@@ -132,6 +138,14 @@ def _label_lines(sample, placed, cat_ids: dict, task: str, issues: list, skipped
                             normalized(poly, w, h)]))
             continue
         if ann.geom == "poly":
+            if task == 'detect' and polygons_as_boxes:
+                from ..annotate.model import Ann
+                box = clamp_box(Ann('box', list(ann.bbox()), ann.label), w, h, issues, sample)
+                if box:
+                    rows.append(' '.join([str(cls)] + [f'{v:.6f}' for v in _mid(*box,w,h)]))
+                else:
+                    skipped.append({'uri':sample.uri,'geom':'poly','label':ann.label,'reason':'外接框裁切后为空'})
+                continue
             if task != "segment":
                 skipped.append({"uri": sample.uri, "geom": "poly", "label": ann.label,
                                 "reason": "detect 任务不写轮廓，改 task=segment"})
@@ -153,6 +167,8 @@ def _mid(x, y, bw, bh, w, h):
 
 
 def _collapsed(ring) -> bool:
+    if len(ring) < 6:
+        return True
     xs, ys = ring[0::2], ring[1::2]
     return max(xs) - min(xs) <= 0.0 or max(ys) - min(ys) <= 0.0
 

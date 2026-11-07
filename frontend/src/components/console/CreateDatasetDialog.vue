@@ -15,12 +15,12 @@ const emit = defineEmits<{ close: []; created: [datasetId: string] }>()
 const toast = useToast()
 
 const TYPE_OPTIONS = [
-  { value: 'detection', label: 'detection' },
-  { value: 'classification', label: 'classification' },
-  { value: 'segmentation', label: 'segmentation' },
-  { value: 'series_interval', label: 'series_interval' },
-  { value: 'event_level', label: 'event_level' },
-  { value: 'mixed', label: 'mixed' },
+  { value: 'detection', label: '目标检测' },
+  { value: 'classification', label: '图像分类' },
+  { value: 'segmentation', label: '图像分割' },
+  { value: 'series_interval', label: '时序区间' },
+  { value: 'event_level', label: '事件等级' },
+  { value: 'mixed', label: '混合数据' },
 ]
 
 const name = ref('')

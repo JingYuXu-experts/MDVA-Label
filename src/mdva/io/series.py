@@ -181,7 +181,9 @@ def _read_table(uri: str) -> tuple:
         return header, cols, None
 
     if suffix == ".npy":
-        arr = np.load(path)
+        arr = np.load(path, allow_pickle=False)
+        if arr.ndim not in (1, 2) or (arr.ndim == 2 and arr.dtype.kind in 'biu'):
+            raise ValueError("2D 整型数组不当时序处理；掩膜/标签请使用数据源导入，或转 16-bit PNG / 单波段 2D FITS")
         if arr.ndim == 1:
             return ["ch0"], [arr], None
         header = [f"ch{i}" for i in range(arr.shape[1])]
@@ -190,6 +192,8 @@ def _read_table(uri: str) -> tuple:
     if suffix == ".npz":
         with np.load(path) as zf:
             keys = list(zf.keys())
+            if not keys or any(zf[k].ndim != 1 for k in keys) or len({len(zf[k]) for k in keys}) != 1:
+                raise ValueError("NPZ 时序格式要求等长一维通道；视频请转 .npy 帧栈或帧目录，掩膜请转 16-bit PNG / 单波段 2D FITS")
             time_key = next((k for k in keys if k.lower() in ("time", "t", "timestamp")), None)
             data_keys = [k for k in keys if k != time_key]
             cols = [zf[k] for k in data_keys]

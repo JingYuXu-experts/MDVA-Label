@@ -7,6 +7,7 @@
  * 切到增强产出的版本时自动拉谱系，B 级双联就在右栏行展开处。
  */
 import { computed, onBeforeUnmount, onMounted, watch } from 'vue'
+import ScopePicker from '@/components/layout/ScopePicker.vue'
 import RecipePanel from '@/components/augment/RecipePanel.vue'
 import PreviewPane from '@/components/augment/PreviewPane.vue'
 import RunPanel from '@/components/augment/RunPanel.vue'
@@ -44,6 +45,11 @@ async function pickExample(uris: string[]): Promise<string> {
   return uris[0]
 }
 
+async function onScope(uris: string[]) {
+  store.setScope(uris)
+  store.setExample(await pickExample(uris))
+}
+
 async function syncScope() {
   if (!ctx.dataset || !ctx.version) {
     store.setScope([])
@@ -53,9 +59,6 @@ async function syncScope() {
   }
   store.category = String(ctx.currentDataset?.meta?.category || '')
   await items.fetchItems()
-  const uris = items.items.map(i => i.uri)
-  store.setScope(uris)
-  store.setExample(await pickExample(uris))
   /** 谱系只在增强产出的版本上有意义：判据取后端版本 op，前端不猜 */
   await store.loadLineage(isAugmentVersion.value ? ctx.version : '')
 }
@@ -64,6 +67,7 @@ watch(() => [ctx.dataset, ctx.version], () => { void syncScope() })
 </script>
 
 <template>
+  <div class="augment-wrapper"><ScopePicker @change="onScope" />
   <div
     class="augment"
     :data-scope="store.scope.length"
@@ -79,10 +83,11 @@ watch(() => [ctx.dataset, ctx.version], () => { void syncScope() })
       text="当前版本没有可选条目：先在管理台建集或切换到有数据的版本"
     />
     <RunPanel />
-  </div>
+  </div></div>
 </template>
 
 <style scoped>
+.augment-wrapper {flex:1;min-height:0;display:flex;flex-direction:column;}
 .augment { flex: 1; min-height: 0; display: flex; align-items: stretch; background: var(--bg-base); }
 .augment__noscope { flex: 1; border-right: 1px solid var(--border); }
 </style>

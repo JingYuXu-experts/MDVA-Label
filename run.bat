@@ -49,4 +49,5 @@ echo  使用 py -3
 py -3 main.py
 
 :done
+if errorlevel 1 pause
 endlocal

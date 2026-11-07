@@ -37,8 +37,7 @@ const store = useExportStore()
       </MButton>
     </div>
     <p class="opts__note">
-      每种格式的实际目录是<code class="mono">&lt;落盘根&gt;/&lt;数据集&gt;-&lt;版本&gt;-&lt;格式&gt;</code>，
-      由后端生成并在导出报告里回显，界面上不重复拼一遍以免对不上。
+      每次导出生成独立目录，完成后在导出结果中显示实际路径。
     </p>
   </div>
 </template>

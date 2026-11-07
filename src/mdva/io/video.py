@@ -373,10 +373,10 @@ def make_source(uri, fps: Optional[float] = None, t0: Optional[float] = None) ->
         src = DirectoryFrames(path, fps=fps or 1.0, t0=t0)
     elif path.suffix.lower() in STACK_SUFFIXES:
         src = NpyStackFrames(path, fps=fps or 1.0, t0=t0)
-    elif path.suffix.lower() in VIDEO_SUFFIXES or path.is_file():
+    elif path.suffix.lower() in VIDEO_SUFFIXES:
         src = VideoFileFrames(path, fps=fps, t0=t0)
     else:
-        raise ValueError(f"无法作为帧序列打开: {uri}")
+        raise ValueError("视频格式不明确：请提供受支持的视频文件、.npy 帧栈或帧目录；NPZ 不作为视频解码")
     src.sidecar = side
     return src
 

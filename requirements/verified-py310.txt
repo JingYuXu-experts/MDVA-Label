@@ -1,5 +1,5 @@
 # 生成物，别手改：python -m pip freeze 里筛出项目实际导入的包
-# 环境：conda env `mdva`  Python 3.10.20  (E:\ANACONDA\envs\mdva\python.exe)
+# 环境：conda env `mdva`  Python 3.10.20
 # 生成时间：2026-10-20  当时 294 项测试全绿
 #
 # 这份是"验证过的精确版本"，requirements*.txt 里的区间才是意图声明。

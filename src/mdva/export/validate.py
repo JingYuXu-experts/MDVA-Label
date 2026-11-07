@@ -37,8 +37,42 @@ def validate(path, version_id: str, store, states=None, root=None,
     if store is not None and expectation is None:
         params = report.get("params") or {}
         from .base import load_dataset
-
-        ds = load_dataset(store, version_id,
+        if params.get('annotation_source') == 'original':
+            from .reference import reference_dataset, read_mask, rle_encode
+            import numpy as np
+            ds = reference_dataset(store, version_id, params.get('only_labels'))
+            index = json.loads((out / 'mask_index.json').read_text(encoding='utf-8'))
+            records = {r['uri']: r for r in store.version_records(version_id)}
+            coco = json.loads((out / 'instances.json').read_text(encoding='utf-8'))
+            image_names = {image['id']: image['file_name'] for image in coco['images']}
+            anns_by_image = {}
+            for annotation in coco['annotations']:
+                anns_by_image.setdefault(image_names.get(annotation['image_id']), []).append(annotation)
+            verified = 0
+            for entry in index:
+                record = records.get(entry['uri'])
+                target = (out / 'masks' / entry['mask']).resolve()
+                if out.resolve() not in target.parents or not record:
+                    _issue(result, '掩膜索引包含无效路径或未知样本')
+                    continue
+                source = read_mask(store.to_abs(record['mask_uri']))
+                ids = set()
+                for annotation in anns_by_image.get(entry['image'], []):
+                    value = (annotation.get('mdva') or {}).get('instance_id')
+                    ids.add(value)
+                    if not isinstance(value, int) or value <= 0 or annotation.get('segmentation') != rle_encode(source == value):
+                        _issue(result, f"COCO 实例分割像素不一致：{entry['uri']}#{value}")
+                if ids != set(int(v) for v in np.unique(source) if v != 0):
+                    _issue(result, f"COCO 实例编号集合不一致：{entry['uri']}")
+                if not np.array_equal(source, read_mask(target)):
+                    _issue(result, f"原始掩膜像素不一致：{entry['uri']}")
+                else:
+                    verified += 1
+            result['counts']['pixel_verified_masks'] = verified
+            if verified != len(ds.samples):
+                _issue(result, '原始掩膜数量不一致')
+        else:
+            ds = load_dataset(store, version_id,
                           states=states or params.get("states"),
                           min_confidence=params.get("min_confidence"),
                           only_labels=params.get("only_labels"), root=root)
@@ -117,9 +151,18 @@ def _coco(out: Path, report: dict, result: dict) -> None:
             _issue(result, f"标注 {a.get('id')} 的 bbox 超出图片尺寸 {img['width']}x{img['height']}")
         if a.get("area", 0) <= 0:
             _issue(result, f"标注 {a.get('id')} 的 area<=0")
-        for ring in a.get("segmentation") or []:
-            if len(ring) < 6 or len(ring) % 2:
-                _issue(result, f"标注 {a.get('id')} 的分割环顶点数非法：{len(ring)}")
+        segmentation = a.get('segmentation') or []
+        if isinstance(segmentation, dict):
+            counts = segmentation.get('counts', [])
+            if (segmentation.get('size') != [img['height'], img['width']]
+                    or not isinstance(counts, list) or any(not isinstance(n, int) or n < 0 for n in counts)
+                    or sum(counts) != img['height'] * img['width']
+                    or sum(counts[1::2]) != a.get('area')):
+                _issue(result, f"标注 {a.get('id')} 的 RLE 尺寸、面积或游程计数无效")
+        else:
+            for ring in segmentation:
+                if len(ring) < 6 or len(ring) % 2:
+                    _issue(result, f"标注 {a.get('id')} 的分割环顶点数非法：{len(ring)}")
 
     missing = [e["file_name"] for e in images
                if not (out / (report.get("params") or {}).get("images_dir", "images")

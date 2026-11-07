@@ -40,7 +40,7 @@ const entries = computed(() => {
   return [
     { key: 'uri', value: it.uri, mono: true },
     { key: '模态', value: it.modality || '未知（服务端安全回退）' },
-    { key: '尺寸', value: m ? `${m.width}×${m.height}` : '—' },
+    { key: '尺寸', value: m ? `${m.native_width || m.width}×${m.native_height || m.height}` : '—' },
     { key: '时间范围', value: m && 't_span' in m ? String(m['t_span']) : '—' },
     { key: '标注数', value: it.n_annotations },
     { key: '版本', value: ctx.version || '—', mono: true },

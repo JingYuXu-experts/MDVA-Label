@@ -21,6 +21,14 @@ export function bucketOf(item: ItemRow): Exclude<StateBucket, ''> {
 
 export const useItemsStore = defineStore('items', () => {
   const items = ref<ItemRow[]>([])
+  const page = ref(1)
+  const pageSize = ref(120)
+  const total = ref(0)
+  const categoryFilter = ref('')
+  const serverCounts = ref<Record<string, number>>({ '': 0, unlabeled: 0, draft: 0, submitted: 0, approved: 0 })
+  const serverModalities = ref<string[]>([])
+  let generation = 0
+  let lastContext = ""
   const loading = ref(false)
   const error = ref('')
   const stateFilter = ref<StateBucket>('')
@@ -33,33 +41,18 @@ export const useItemsStore = defineStore('items', () => {
 
   let controller: AbortController | null = null
 
-  const modalities = computed(() => {
-    const set = new Set<string>()
-    for (const it of items.value) if (it.modality) set.add(String(it.modality))
-    return [...set].sort()
-  })
+  const modalities = computed(() => serverModalities.value)
+  const filtered = computed(() => items.value)
+  const bucketCounts = computed(() => serverCounts.value)
 
-  const filtered = computed(() => {
-    const kw = search.value.trim().toLowerCase()
-    return items.value.filter(it => {
-      if (stateFilter.value && bucketOf(it) !== stateFilter.value) return false
-      if (kw && !it.uri.toLowerCase().includes(kw)) return false
-      return true
-    })
-  })
-
-  /** 五档计数（含全部），供统计条与筛选自洽验收 */
-  const bucketCounts = computed(() => {
-    const counts: Record<string, number> = { '': items.value.length, unlabeled: 0, draft: 0, submitted: 0, approved: 0 }
-    for (const it of items.value) counts[bucketOf(it)] += 1
-    return counts
-  })
-
-  const selectedList = computed(() => items.value.filter(it => selected.value.has(it.uri)))
+  const selectedList = computed(() => [...selected.value].map(uri => ({ uri })))
 
   async function fetchItems() {
     const ctx = useCtxStore()
-    if (!ctx.dataset || !ctx.version) { items.value = []; return }
+    const context = `${ctx.ws}|${ctx.dataset}|${ctx.version}`
+    if (context !== lastContext) { reset(); lastContext = context }
+    const run = ++generation
+    if (!ctx.dataset || !ctx.version) { reset(); return }
     // 取消在途请求，防旧响应覆盖新状态（UI规格 §3.2-6）
     controller?.abort()
     controller = new AbortController()
@@ -67,23 +60,26 @@ export const useItemsStore = defineStore('items', () => {
     error.value = ''
     try {
       const resp = await api.getItems(ctx.dataset, ctx.version,
-        { modality: modalityFilter.value }, controller.signal)
+        { modality: modalityFilter.value, state: stateFilter.value, search: search.value, category: categoryFilter.value, page: page.value, page_size: pageSize.value }, controller.signal)
+      if (run !== generation) return
+      total.value = resp.total
+      page.value = resp.page
+      serverCounts.value = resp.counts
+      serverModalities.value = resp.modalities
       items.value = resp.items
-      // 清掉已不在列表中的选中项
-      const uris = new Set(resp.items.map(i => i.uri))
-      for (const uri of [...selected.value]) if (!uris.has(uri)) selected.value.delete(uri)
-      selected.value = new Set(selected.value)
+      // Selection persists across pages; changing dataset/version clears it above.
     } catch (err) {
-      if ((err as Error).name === 'AbortError') return
+      if (run !== generation || (err as Error).name === 'AbortError') return
       error.value = err instanceof Error ? err.message : String(err)
       // 请求失败保留旧数据 + 重试（UI规格 §5.1 状态）
     } finally {
-      loading.value = false
+      if (run === generation) loading.value = false
     }
   }
 
   /** 可视区批量缩略图：单批 ≤32 uris（UI规格 §8），cell 显式 160,100（§5.1） */
   async function fetchThumbs(uris: string[], signal?: AbortSignal) {
+    const run = generation
     const pending = uris.filter(u => !thumbs.value.has(u) && !thumbsLoading.value.has(u))
     if (!pending.length) return
     for (const u of pending) thumbsLoading.value.add(u)
@@ -92,6 +88,7 @@ export const useItemsStore = defineStore('items', () => {
       for (let i = 0; i < pending.length; i += 32) {
         const batch = pending.slice(i, i + 32)
         const resp = await api.getThumbs(batch, [160, 100], 0, signal)
+        if (run !== generation) return
         for (const row of resp.thumbs) thumbs.value.set(row.uri, row)
         thumbs.value = new Map(thumbs.value)
       }
@@ -100,6 +97,7 @@ export const useItemsStore = defineStore('items', () => {
         // 坏批不阻塞：留空由调用方重试
       }
     } finally {
+      if (run !== generation) return
       for (const u of pending) thumbsLoading.value.delete(u)
       thumbsLoading.value = new Set(thumbsLoading.value)
     }
@@ -123,7 +121,12 @@ export const useItemsStore = defineStore('items', () => {
   }
 
   function reset() {
+    generation += 1
     controller?.abort()
+    loading.value = false
+    total.value = 0
+    page.value = 1
+    serverCounts.value = { "": 0, unlabeled: 0, draft: 0, submitted: 0, approved: 0 }
     items.value = []
     thumbs.value = new Map()
     thumbsLoading.value = new Set()
@@ -132,10 +135,11 @@ export const useItemsStore = defineStore('items', () => {
     search.value = ''
     stateFilter.value = ''
     modalityFilter.value = ''
+    categoryFilter.value = ''
   }
 
   return {
-    items, loading, error, stateFilter, modalityFilter, search, selected,
+    items, loading, error, stateFilter, modalityFilter, search, selected, page, pageSize, total, categoryFilter,
     thumbs, thumbsLoading, modalities, filtered, bucketCounts, selectedList,
     fetchItems, fetchThumbs, toggleSelect, selectAll, clearSelection, reset,
   }

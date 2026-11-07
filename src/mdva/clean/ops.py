@@ -374,7 +374,8 @@ class Crop:
             self.params.setdefault(key, spec["default"])
 
     def box(self, shape: tuple) -> tuple:
-        h, w = shape[-2], shape[-1]
+        from ..core.spatial import image_hw
+        h, w = image_hw(shape)
         box = self.params.get("box")
         if box:
             x0, y0, x1, y1 = [int(round(v)) for v in box]
@@ -444,7 +445,8 @@ def map_geometry(ann, chain: Sequence[tuple], shape: tuple):
     空间变换对 interval/level 没有意义，时间平移（shift_time）对 box 没有意义，
     各自跳过自己不管的那一路——把时间区间当成矩形去旋转是最容易静默出错的组合。
     """
-    h, w = float(shape[-2]), float(shape[-1])
+    from ..core.spatial import image_hw
+    h, w = map(float, image_hw(shape))
     for name, params in chain:
         temporal = ann.geom in ("interval", "level")
         if name == "shift_time":

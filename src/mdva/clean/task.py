@@ -211,8 +211,20 @@ def inherit(store, from_version: str, to_version: str, keep=None,
     return copied
 
 
-def apply(store, version_id: str, specs: Sequence[dict], uris=None, out_dir=None,
-          calibration=None, write_transformed: bool = False, author: str = "") -> dict:
+def apply(store, version_id, specs, uris=None, out_dir=None,
+          calibration=None, write_transformed=False, author=''):
+    version = store.get_version(version_id)
+    if not version: raise KeyError('未知版本')
+    task = store.create_task('clean', version['dataset_id'], version_id, params={'ops': specs})
+    try:
+        return _apply(store, version_id, specs, uris, out_dir, calibration, write_transformed, author, task)
+    except Exception as exc:
+        store.update_task(task, 'failed', {'error': str(exc)})
+        raise
+
+
+def _apply(store, version_id: str, specs: Sequence[dict], uris=None, out_dir=None,
+          calibration=None, write_transformed: bool = False, author: str = "", task_id=None) -> dict:
     """执行清洗并产新版本。`uris` 缺省用该版本里已标注涉及的全部数据项。
 
     变换只有落盘才改变条目 uri（`write_transformed=True` 且给了 `out_dir`）；
@@ -245,7 +257,7 @@ def apply(store, version_id: str, specs: Sequence[dict], uris=None, out_dir=None
     transformed = [{"source": r["source"], "written": r["written"],
                     "chain": r["chain"]} for r in written.values()]
 
-    task = store.create_task("clean", version["dataset_id"], version_id, new_version,
+    task = task_id or store.create_task("clean", version["dataset_id"], version_id, new_version,
                              {"ops": [s.get("name") for s in specs]})
     report = {"version": new_version, "parent": version_id, "summary": result.summary(),
               "dropped": result.dropped, "kept": result.kept,
@@ -304,6 +316,11 @@ def rollback(store, version_id: str) -> dict:
     if task is None:
         raise ValueError(f"版本 {version_id} 不是由任务产出的，没有可回退的写盘清单")
     report = task.get("report") or {}
+
+    # Validate every recorded write before deleting any of them. Original mounts stay read-only.
+    for record in report.get('written') or []:
+        for path, _ in _deletable(record):
+            store.require_not_source(path)
 
     removed, skipped = [], []
     for record in report.get("written") or []:

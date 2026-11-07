@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import * as api from '@/api/endpoints'
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { frameUrl } from '@/api/endpoints'
 import { useCanvasStore, type DraftAnn, type Geom } from '@/stores/canvas'
@@ -450,6 +451,10 @@ onBeforeUnmount(() => { if (throttleTimer) clearTimeout(throttleTimer); unbindGe
       <div v-else class="stage__empty" :style="{ width: store.frameW + 'px', height: store.frameH + 'px' }">
         无帧数据
       </div>
+      <img v-if="store.referenceShown && store.currentUri" class="stage__mask"
+        :src="api.referenceOverlayUrl(store.currentUri, store.frameW, store.frameH, store.referenceInstance)"
+        :style="{ opacity: store.referenceOpacity }" :width="store.frameW" :height="store.frameH"
+        alt="原始实例掩膜参考" draggable="false" />
       <svg
         ref="svgEl"
         class="stage__svg"
@@ -557,6 +562,7 @@ onBeforeUnmount(() => { if (throttleTimer) clearTimeout(throttleTimer); unbindGe
 .stage { position: relative; margin: auto; -webkit-user-drag: none; user-select: none; }
 .stage__frame { display: block; image-rendering: auto; -webkit-user-drag: none; user-select: none; }
 .stage__empty { display: flex; align-items: center; justify-content: center; color: var(--text-muted); font-size: var(--fs-md); }
+.stage__mask { position:absolute; inset:0; pointer-events:none; }
 .stage__svg { position: absolute; inset: 0; -webkit-user-drag: none; user-select: none; touch-action: none; }
 .ann { cursor: pointer; }
 .ann.is-sel > rect, .ann.is-sel > circle, .ann.is-sel > polygon { stroke-width: 3; }

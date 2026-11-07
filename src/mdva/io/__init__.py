@@ -123,6 +123,26 @@ def sniff(uri) -> str:
     suffix = path.suffix.lower()
 
     if suffix in _BY_SHAPE:
+        import numpy as np
+        if suffix == ".npz":
+            # Read array headers inside ZIP, never let imageio interpret dictionary keys as frames.
+            import zipfile
+            with zipfile.ZipFile(path) as archive:
+                shapes = []
+                for name in archive.namelist():
+                    if name.endswith('.npy'):
+                        with archive.open(name) as stream:
+                            ver = np.lib.format.read_magic(stream)
+                            shape, _, _ = np.lib.format._read_array_header(stream, ver)
+                            shapes.append(shape)
+            if not shapes or any(len(sh) != 1 for sh in shapes) or len({sh[0] for sh in shapes}) != 1:
+                raise ValueError("NPZ 格式不明确：时序必须由等长一维通道组成；视频请转 .npy 帧栈或帧目录，掩膜请转 16-bit PNG / 单波段 2D FITS")
+            return Modality.SERIES.value
+        with path.open('rb') as stream:
+            ver = np.lib.format.read_magic(stream)
+            shape, _, dtype = np.lib.format._read_array_header(stream, ver)
+        if len(shape) == 2 and dtype.kind in 'biu':
+            raise ValueError("2D 整型数组不当时序处理；若为掩膜/标签请使用数据源导入，或转 16-bit PNG / 单波段 2D FITS；时序请提供浮点通道表")
         ndim = _stack_ndim(uri)
         if ndim is not None and ndim >= 3:
             return Modality.VIDEO.value
@@ -221,10 +241,10 @@ def scan(root, recursive: bool = True, limit: Optional[int] = None, **load_kwarg
     for path in candidates:
         if path.is_file() and _is_sidecar(path):
             continue
-        kind = sniff(str(path))
-        if not kind:
-            continue
         try:
+            kind = sniff(str(path))
+            if not kind:
+                continue
             items.append(load_any(str(path), modality=kind, **load_kwargs))
         except Exception as exc:
             print(f"[warn] 跳过 {path.name}: {exc}")

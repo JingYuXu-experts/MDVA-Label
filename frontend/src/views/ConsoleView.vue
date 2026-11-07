@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, ref, watch, onBeforeUnmount } from 'vue'
+import { storeToRefs } from 'pinia'
 import { useRouter } from 'vue-router'
 import { RefreshCw, Plus, LayoutGrid, List, Images, PackagePlus } from 'lucide-vue-next'
 import StatCard from '@/components/ui/StatCard.vue'
@@ -12,29 +13,28 @@ import MEmpty from '@/components/ui/MEmpty.vue'
 import MTable, { type TableColumn } from '@/components/ui/MTable.vue'
 import ThumbGrid from '@/components/console/ThumbGrid.vue'
 import ItemDetailPanel from '@/components/console/ItemDetailPanel.vue'
+import SourceImportDialog from '@/components/console/SourceImportDialog.vue'
 import CreateDatasetDialog from '@/components/console/CreateDatasetDialog.vue'
 import CollectDialog from '@/components/console/CollectDialog.vue'
 import MosaicDialog from '@/components/console/MosaicDialog.vue'
 import { useCtxStore } from '@/stores/ctx'
 import { useItemsStore, type StateBucket } from '@/stores/items'
-import { useCanvasStore } from '@/stores/canvas'
 import * as api from '@/api/endpoints'
 import type { StatsResp, ItemRow } from '@/api/types'
 
 const ctx = useCtxStore()
 const itemsStore = useItemsStore()
-const canvas = useCanvasStore()
 const router = useRouter()
 
 const stats = ref<StatsResp | null>(null)
 const createOpen = ref(false)
+const importOpen = ref(false)
 const collectOpen = ref(false)
 const mosaicOpen = ref(false)
 const collectUris = ref<string[]>([])
 const activeUri = ref('')
 const viewMode = ref<'grid' | 'list'>('grid')
-const page = ref(1)
-const pageSize = ref(120)
+const { page, pageSize } = storeToRefs(itemsStore)
 
 const activeItem = computed(() =>
   itemsStore.items.find(i => i.uri === activeUri.value) || null)
@@ -53,20 +53,13 @@ const bucketOptions = computed(() => {
 
 const modalityOptions = computed(() => [
   { value: '', label: '全部模态' },
-  ...itemsStore.modalities.map(m => ({ value: m, label: m })),
+  ...itemsStore.modalities.map(m => ({ value: m, label: ({image:"图像",cube:"立方体",series:"时序",event:"事件",video:"视频"} as Record<string,string>)[m] || m })),
 ])
 
-const pageCount = computed(() =>
-  Math.max(1, Math.ceil(itemsStore.filtered.length / pageSize.value)))
-const paged = computed(() => {
-  const start = (page.value - 1) * pageSize.value
-  return itemsStore.filtered.slice(start, start + pageSize.value)
-})
-const pageRange = computed(() => {
-  if (!itemsStore.filtered.length) return '0'
-  const start = (page.value - 1) * pageSize.value + 1
-  return `${start}–${Math.min(page.value * pageSize.value, itemsStore.filtered.length)} / ${itemsStore.filtered.length}`
-})
+const pageCount = computed(() => Math.max(1, Math.ceil(itemsStore.total / pageSize.value)))
+const paged = computed(() => itemsStore.items)
+const pageRange = computed(() => itemsStore.total
+  ? `${(page.value-1)*pageSize.value+1}–${Math.min(page.value*pageSize.value, itemsStore.total)} / ${itemsStore.total}` : '0')
 
 const LIST_COLUMNS: TableColumn<ItemRow>[] = [
   { key: 'name', label: '名称', sortable: true, width: '220px' },
@@ -76,14 +69,21 @@ const LIST_COLUMNS: TableColumn<ItemRow>[] = [
 ]
 
 watch(pageSize, () => { page.value = 1 })
-watch(() => itemsStore.filtered.length, () => {
-  if (page.value > pageCount.value) page.value = 1
+watch([page, pageSize], () => { void itemsStore.fetchItems() })
+let filterTimer: ReturnType<typeof setTimeout> | undefined
+watch(() => [itemsStore.stateFilter, itemsStore.modalityFilter, itemsStore.search, itemsStore.categoryFilter], () => {
+  clearTimeout(filterTimer)
+  filterTimer = setTimeout(() => { page.value = 1; void itemsStore.fetchItems() }, 200)
 })
+onBeforeUnmount(() => clearTimeout(filterTimer))
 
+let statsGeneration = 0
 async function fetchStats() {
+  const run = ++statsGeneration
   if (!ctx.dataset || !ctx.version) { stats.value = null; return }
   try {
-    stats.value = await api.getStats(ctx.dataset, ctx.version)
+    const result = await api.getStats(ctx.dataset, ctx.version)
+    if (run === statsGeneration) stats.value = result
   } catch {
     stats.value = null
   }
@@ -101,15 +101,14 @@ watch(() => [ctx.dataset, ctx.version], () => {
 }, { immediate: true })
 
 // 模态筛选走服务端参数（接口映射 §5.1），变更后重拉
-watch(() => itemsStore.modalityFilter, () => { void itemsStore.fetchItems() })
+
 
 function onPick(uri: string) {
   activeUri.value = uri
 }
 
 function onAnnotate(uri: string) {
-  canvas.openItem(uri)
-  void router.push({ path: '/annotate', query: router.currentRoute.value.query })
+  void router.push({ path: '/annotate', query: { ...router.currentRoute.value.query, uri } })
 }
 
 function onCollectSingle(uri: string) {
@@ -155,6 +154,7 @@ function onRowClick(row: ItemRow) {
         aria-label="状态筛选" />
       <MSelect v-model="itemsStore.modalityFilter" :options="modalityOptions" width="110px"
         aria-label="模态筛选" />
+      <MSelect v-model="itemsStore.categoryFilter" :options="[{value:'', label:'全部类别'}, {value:'AR',label:'活动区 AR'}, {value:'CH',label:'冕洞 CH'}, {value:'FL',label:'暗条 FL'}]" width="125px" aria-label="类别筛选" />
       <MInput v-model="itemsStore.search" placeholder="搜索 uri 子串…" class="toolbar__search" />
       <MButton variant="ghost" size="sm" title="刷新" :loading="itemsStore.loading"
         @click="refreshAll">
@@ -173,6 +173,7 @@ function onRowClick(row: ItemRow) {
         @click="viewMode = viewMode === 'grid' ? 'list' : 'grid'">
         <component :is="viewMode === 'grid' ? List : LayoutGrid" :size="14" aria-hidden="true" />
       </MButton>
+      <MButton variant="secondary" size="sm" @click="importOpen = true">导入太阳数据</MButton>
       <MButton variant="primary" size="sm" @click="createOpen = true">
         <Plus :size="14" aria-hidden="true" /> 新建数据集
       </MButton>
@@ -217,6 +218,7 @@ function onRowClick(row: ItemRow) {
       </span>
     </footer>
 
+    <SourceImportDialog :open="importOpen" @close="importOpen = false" @created="onCreated" />
     <CreateDatasetDialog :open="createOpen" @close="createOpen = false" @created="onCreated" />
     <CollectDialog :open="collectOpen" :uris="collectUris" @close="collectOpen = false" />
     <MosaicDialog :open="mosaicOpen" :uris="itemsStore.selectedList.map(i => i.uri)"

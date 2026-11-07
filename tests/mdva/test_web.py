@@ -22,6 +22,29 @@ from mdva.web.routes import Bad, Params, call
 from mdva.web.server import MAX_BODY, STATIC_DIR, is_loopback, make_server
 
 
+def test_port_conflict_and_workspace_identity(tmp_path):
+    from mdva.web.server import serve
+    ws = Workspaces(tmp_path)
+    httpd = make_server(ws, port=0)
+    thread = threading.Thread(target=httpd.serve_forever, daemon=True)
+    thread.start()
+    port = httpd.server_address[1]
+    other = tmp_path / 'other'
+    other.mkdir()
+    other_ws = Workspaces(other)
+    try:
+        with pytest.raises(OSError):
+            make_server(ws, port=port)
+        assert serve(ws, port=port, reuse=True) == 0
+        assert serve(other_ws, port=port, reuse=True) == 1
+    finally:
+        httpd.shutdown()
+        httpd.server_close()
+        thread.join(timeout=5)
+        ws.close()
+        other_ws.close()
+
+
 # ---------------------------------------------------------------------- 夹具
 
 @pytest.fixture(scope="module")

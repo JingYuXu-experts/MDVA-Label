@@ -545,7 +545,7 @@ def build_all(root, categories: Optional[list] = None, seed: int = 0, **knobs) -
         "generated_by": "mdva.datasets",
         "seed": seed,
         "categories": {name: {**CATEGORIES[name],
-                              "root": str(Path(root) / name),
+                              "root": name,  # relative to this manifest, portable across machines
                               "truth": results.get(name, {}).get("truth", {})}
                        for name in results},
     }

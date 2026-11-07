@@ -279,6 +279,7 @@ def _health(cx: Ctx):
     from .. import __version__
 
     return {"ok": True, "app": "mdva", "version": __version__, "root": str(cx.ws.root),
+            'revision': 'web-ssafd-1', 'sources': list(cx.hub.store.source_roots),
             "workspaces": cx.ws.names(), "default": cx.ws.default_ws(),
             "out_dir": str(cx.hub.out_dir), "offline": True}
 
@@ -360,9 +361,65 @@ def _scan(cx: Ctx):
 
 @route("GET", "/items", "数据集条目 + 各自的标注状态")
 def _items(cx: Ctx):
+    if cx.p.has('page'):
+        return cx.hub.items_page(cx.dataset_id(), cx.version_id(),
+                                 page=cx.p.int_('page', 1), page_size=cx.p.int_('page_size', 120),
+                                 state=cx.p.text('state'), modality=cx.p.text('modality'),
+                                 search=cx.p.text('search'), category=cx.p.text('category'))
     rows = cx.hub.items(cx.dataset_id(), cx.version_id(), state=cx.p.text("state"),
                         modality=cx.p.text("modality"))
     return {"items": rows, "n": len(rows)}
+
+
+@route('GET', '/sources', '已登记的只读数据源（仅返回 ID）')
+def _sources(cx: Ctx):
+    from .solar import Solar
+    return {'sources': Solar(cx.hub).sources()}
+
+
+@route('GET', '/items/uris', '当前版本的全部条目 URI，用于用户显式选择全量处理')
+def _item_uris(cx: Ctx):
+    version = cx.version_id()
+    dataset = cx.hub.store.get_dataset(cx.dataset_id()) or {}
+    if (dataset.get('meta') or {}).get('indexed'):
+        uris = [r['uri'] for r in cx.hub.store.version_records(version)]
+    else:
+        uris = [r['uri'] for r in cx.hub.items(cx.dataset_id(), version)]
+    return {'uris': uris, 'n': len(uris)}
+
+
+@route('POST', '/imports/preview', '只读预检 SSAFD：配对、尺寸与 NOAA 对应关系')
+def _import_preview(cx: Ctx):
+    from .solar import Solar
+    return Solar(cx.hub).preflight(cx.p.need('source_id'))
+
+
+@route('POST', '/imports', '按预检记录建立全量或固定种子小样本索引')
+def _import_execute(cx: Ctx):
+    from .solar import Solar
+    size = cx.p.int_('sample_per_category', 0)
+    if not 0 <= size <= 10000:
+        raise Bad('sample_per_category 必须在 0–10000 之间，0 表示全量')
+    return Solar(cx.hub).execute(cx.p.need('scan_id'), cx.p.text('name'), size, cx.p.int_('seed', 20261107))
+
+
+@route('GET', '/reference', '原始掩膜的只读实例清单')
+def _reference(cx: Ctx):
+    from .solar import Solar
+    return Solar(cx.hub).reference(cx.p.need('uri'))
+
+
+@route('GET', '/reference/overlay', '保持原生几何的透明掩膜叠加图')
+def _reference_overlay(cx: Ctx):
+    from .solar import Solar
+    return Image(Solar(cx.hub).overlay(cx.p.need('uri'), cx.p.int_('width', 960),
+                                     cx.p.int_('height', 540), cx.p.int_('instance', 0)))
+
+
+@route('GET', '/reference/polygons', '把原始实例轮廓近似为可编辑多边形，不改原掩膜')
+def _reference_polygons(cx: Ctx):
+    from .solar import Solar
+    return Solar(cx.hub).polygons(cx.p.need('uri'), cx.p.int_('instance', 0))
 
 
 @route("GET", "/stats", "统计总览（模态分布、审核进度、标签计数）")
@@ -389,8 +446,8 @@ def _frame_meta(cx: Ctx):
 
 @route("GET", "/thumbs", "缩略图墙：并发出图，一路坏图不影响其余")
 def _thumbs(cx: Ctx):
-    return cx.hub.thumbnails(cx.p.list_("uris"), cell=cx.p.pair("cell"),
-                             workers=cx.p.int_("workers", 0))
+    return cx.hub._rel(cx.hub.thumbnails(cx.p.list_("uris"), cell=cx.p.pair("cell"),
+                               workers=cx.p.int_("workers", 0)))
 
 
 @route("GET", "/mosaic", "多路同场景对比拼图，直接给 PNG")
@@ -730,6 +787,9 @@ def _export_report(cx: Ctx):
 
 @route("POST", "/collect", "把选中的条目收进数据集目录，写撤销清单")
 def _collect(cx: Ctx):
+    if cx.p.text("mode", "copy") == "move":
+        for uri in cx.p.list_("uris"):
+            cx.hub.store.require_writable(uri)
     return cx.hub.collect(cx.p.list_("uris"), cx.p.need("target"),
                           mode=cx.p.text("mode", "copy"), flatten=cx.p.flag("flatten"))
 
@@ -737,7 +797,7 @@ def _collect(cx: Ctx):
 @route("POST", "/collect/undo", "按清单回退收录（目标文件被改过就拒绝，除非 force）")
 def _collect_undo(cx: Ctx):
     return cx.hub.collect_undo(cx.p.need("manifest"), keep_dirs=cx.p.flag("keep_dirs", True),
-                               force=cx.p.flag("force"))
+                               force=cx.p.flag("force"), enforce_boundary=True)
 
 
 @route("GET", "/collect/latest", "目标目录里最近一份收录清单")
@@ -808,10 +868,30 @@ def _check_path_values(node, store, key=None, text_carrier=False) -> None:
         for value in node:
             _check_path_values(value, store, key, carrier)
     elif isinstance(node, str) and node.strip():
-        if key in PATH_VALUE_KEYS:
-            store.require_within(node)
-        elif not carrier and _PATH_SHAPE.search(node):
-            store.require_within(node)
+        text = node.strip()
+        if not carrier and text.startswith(("[", "{")):
+            try:
+                decoded = json.loads(text)
+            except (ValueError, RecursionError):
+                raise Bad("容器参数不是合法 JSON") from None
+            _check_path_values(decoded, store, key, carrier)
+        elif key in PATH_VALUE_KEYS or (not carrier and _PATH_SHAPE.search(text)):
+            store.require_within(text)
+
+
+def _normalize_paths(node, store, key=None, carrier=False):
+    carrier = carrier or key in FREE_TEXT_KEYS
+    if isinstance(node, dict):
+        return {k: _normalize_paths(v, store, k, carrier) for k, v in node.items()}
+    if isinstance(node, (list, tuple)):
+        return [_normalize_paths(v, store, key, carrier) for v in node]
+    if isinstance(node, str) and node.strip():
+        text = node.strip()
+        if not carrier and text.startswith(('[', '{')):
+            return _normalize_paths(json.loads(text), store, key, carrier)
+        if key in PATH_VALUE_KEYS or (not carrier and _PATH_SHAPE.search(text)):
+            return str(store.require_within(text))
+    return node
 
 
 def guard_paths(p: "Params", hub) -> None:
@@ -830,13 +910,19 @@ def guard_paths(p: "Params", hub) -> None:
         if not p.has(key):
             continue
         value = p.raw(key)
+        if key == "uris":
+            value = p.list_(key)
         if isinstance(value, (list, tuple)):
             p.rewrite(key, [str(store.require_within(v)) for v in value if str(v or "").strip()])
         elif str(value or "").strip():
             p.rewrite(key, str(store.require_within(value)))
+        if key in ("target", "out_dir") and str(value or "").strip():
+            store.require_writable(p.raw(key))
     # 第二把尺：`rest()`/`params` 嵌套位上的路径值不在 PATH_KEYS 里（`source_uri` 就是这枚，
     # 判据附件 v1.0 §2 实测五道门全是 200 且真读）。判据按消费点，不按键名。
     _check_path_values(p.inbound(), store)
+    for key, value in p.inbound().items():
+        p.rewrite(key, _normalize_paths(value, store, key))
 
 
 def status_for(exc: Exception) -> int:
@@ -844,6 +930,8 @@ def status_for(exc: Exception) -> int:
     from ..annotate.state import PermissionDenied
 
     if isinstance(exc, Bad):
+        return 400
+    if isinstance(exc, RecursionError):
         return 400
     if isinstance(exc, (PermissionDenied, PermissionError)):
         return 403

@@ -1,3 +1,4 @@
+import { setWorkspaceProvider } from '@/api/client'
 /**
  * ctx store：工作区/数据集/版本/角色/健康（UI规格 §3.1、§3.3）。
  * 三者变更全局生效并写入 URL query（?ws=&dataset=&version=），刷新/分享不丢上下文。
@@ -14,6 +15,7 @@ export const useCtxStore = defineStore('ctx', () => {
   const datasets = ref<DatasetRow[]>([])
   const versions = ref<VersionRow[]>([])
   const ws = ref('')
+  setWorkspaceProvider(() => ws.value)
   const dataset = ref('')
   const version = ref('')
   const role = ref<Role>('admin')
@@ -30,6 +32,8 @@ export const useCtxStore = defineStore('ctx', () => {
 
   let healthTimer: ReturnType<typeof setInterval> | null = null
   let router: Router | null = null
+  let contextGuard: () => boolean = () => true
+  function setContextGuard(guard: (() => boolean) | null) { contextGuard = guard || (() => true) }
 
   function setRouter(r: Router) {
     router = r
@@ -74,7 +78,7 @@ export const useCtxStore = defineStore('ctx', () => {
   async function loadWorkspaces() {
     const resp = await api.getWorkspaces()
     workspaces.value = resp.workspaces
-    if (!ws.value) ws.value = health.value?.default || resp.workspaces[0]?.name || ''
+    if (!ws.value) ws.value = health.value?.default || resp.workspaces[0]?.ws || ''
   }
 
   async function loadDatasets() {
@@ -115,6 +119,7 @@ export const useCtxStore = defineStore('ctx', () => {
   }
 
   async function setWs(name: string) {
+    if (name !== ws.value && !contextGuard()) return
     ws.value = name
     dataset.value = ''
     version.value = ''
@@ -124,13 +129,15 @@ export const useCtxStore = defineStore('ctx', () => {
   }
 
   async function setDataset(id: string) {
+    if (id !== dataset.value && !contextGuard()) return
     dataset.value = id
     version.value = ''
     await loadVersions()
     writeQuery()
   }
 
-  function setVersion(id: string) {
+  function setVersion(id: string, force = false) {
+    if (id !== version.value && !force && !contextGuard()) return
     version.value = id
     writeQuery()
   }
@@ -150,7 +157,7 @@ export const useCtxStore = defineStore('ctx', () => {
   return {
     workspaces, datasets, versions, ws, dataset, version, role,
     health, healthOk, healthError, loading, ctxError, head, currentDataset,
-    refresh, setWs, setDataset, setVersion, setRole, rescan, setRouter,
+    refresh, setWs, setDataset, setVersion, setRole, rescan, setRouter, setContextGuard,
     loadWorkspaces, loadDatasets, loadVersions,
     startHealthPolling, stopHealthPolling, pollHealth, writeQuery,
   }

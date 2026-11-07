@@ -505,6 +505,7 @@ def test_path_value_registry_covers_web_consumers():
                          "workers", "executor", "state", "modality", "limit", "threshold",
                          "rule", "prompts", "name", "op", "nsigma",
                          "analyzer_params", "cell_height", "cell_width", "cols", "rows"}
+    assert not set(routes.FREE_TEXT_KEYS) & reviewed_non_path
     # 这份"已核非路径"名单**不是豁免面**：`_check_path_values` 的形态层（Tier B）照样扫这些键
     # 的值，往里塞绝对路径或 `..` 依然 400——所以登记缺失只影响"精确名"这一层，不影响背板。
     found, missing = set(), set()

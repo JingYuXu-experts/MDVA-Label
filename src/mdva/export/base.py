@@ -199,6 +199,7 @@ def load_dataset(store, version_id: str, states: Optional[Sequence[str]] = None,
     ds = Dataset(dataset=dataset, version=version, labels=store.list_labels(dataset.get("id", "")))
     cache: dict = {}
     grouped: dict = {}
+    indexed = {r['uri']: r for r in store.version_records(version_id)}
     for uri, ann, row in picked:
         key = (uri, ann.slice if ann.slice is not None else 0)
         grouped.setdefault(key, []).append((ann, row))
@@ -236,6 +237,10 @@ def load_dataset(store, version_id: str, states: Optional[Sequence[str]] = None,
         sample = Sample(uri=abs_uri, name=name, modality=modality, width=width, height=height,
                         slice_index=int(index), t_ref=t_ref, t_end=t_end, anns=anns,
                         ann_meta=metas, item=item, meta={**meta, "states": states_})
+        record = indexed.get(uri)
+        if record:
+            sample.meta['source_group'] = record.get('derived_from') or uri
+            # Manual polygon exports never substitute the original expert masks.
         if item is not None and modality in SPATIAL and width:
             sample.mask_uri = _mask_for(item, base)
         ds.samples.append(sample)
@@ -305,13 +310,15 @@ def clamp_box(ann: Ann, width: int, height: int, issues: list, sample: Sample) -
         issues.append({"kind": "box_out_of_bounds", "uri": sample.uri, "slice": sample.slice_index,
                        "coords": list(ann.coords), "size": [width, height]})
         return None
+    if [cx0, cy0, cx1, cy1] != [x0, y0, x1, y1]:
+        issues.append({'kind': 'box_clipped', 'uri': sample.uri, 'slice': sample.slice_index,
+                       'before': [x0, y0, x1, y1], 'after': [cx0, cy0, cx1, cy1]})
     return (cx0, cy0, cx1 - cx0, cy1 - cy0)
 
 
 def polygon_rings(ann: Ann, width: int, height: int) -> list:
-    pts = list(zip(ann.coords[0::2], ann.coords[1::2]))
-    clamped = [(min(max(x, 0.0), width), min(max(y, 0.0), height)) for x, y in pts]
-    return [[v for xy in clamped for v in xy]]
+    from ..core.spatial import clip_polygon
+    return [clip_polygon(ann.coords, width, height)]
 
 
 def normalized(values: Sequence[float], width: int, height: int) -> list:
@@ -364,8 +371,20 @@ def write_sample_mask(sample: Sample, dst_dir: Path) -> Optional[dict]:
     dst_dir.mkdir(parents=True, exist_ok=True)
     src = Path(sample.mask_uri)
     out = dst_dir / f"{sample.name}_mask.png"
-    shutil.copy2(str(src), str(out))
-    w, h = Image.open(str(out)).size
+    if src.suffix.lower() == '.npy':
+        arr = np.load(src, mmap_mode='r', allow_pickle=False)
+        if arr.ndim != 2 or arr.dtype.kind not in 'biu' or arr.min() < 0:
+            raise ValueError('掩膜必须是二维非负整数实例图')
+        if arr.max() > 65535:
+            out = dst_dir / f'{sample.name}_mask.npy'
+            np.save(out, arr, allow_pickle=False)
+        else:
+            Image.fromarray(arr.astype(np.uint16)).save(out)
+        h, w = arr.shape
+    else:
+        shutil.copy2(str(src), str(out))
+        with Image.open(str(out)) as image:
+            w, h = image.size
     return {"file_name": out.name, "width": int(w), "height": int(h),
             "mode": "mask", "source": str(src)}
 

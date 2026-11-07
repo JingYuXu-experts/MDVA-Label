@@ -49,13 +49,29 @@ def export(store, version_id: str, fmt: str, out_dir=None, root=None,
     dataset = store.get_dataset(version["dataset_id"]) or {}
     target = Path(out_dir or default_out_dir(dataset.get("name") or "dataset",
                                              version_id, fmt, root or DEFAULT_ROOT))
+    for key, value in params.items():
+        if key.endswith('_dir') and isinstance(value, str):
+            path = Path(value)
+            if path.is_absolute() or '..' in path.parts:
+                raise ValueError(f'{key} 必须是导出目录内的相对子目录')
 
     if task_id and store.get_task(task_id) is None:
         raise KeyError(f"未知任务 {task_id}：宁可报错，也不要导出一份没人记得的产物")
     tid = task_id or store.create_task("export", dataset.get("id"), version_id, None,
                                        {"format": fmt, **params})
     try:
-        report = entry.factory(store, version_id, str(target), **params)
+        source = params.get('annotation_source', 'current')
+        if source not in ('current', 'original'):
+            raise ValueError('annotation_source 必须为 current 或 original')
+        if source == 'original':
+            if fmt != 'coco':
+                raise ValueError('精确原始分割掩膜请使用 COCO 导出；YOLO/VOC 用于当前人工标注的检测框或多边形')
+            if params.get('states') or params.get('min_confidence') is not None:
+                raise ValueError('原始专家掩膜不具有人工审核状态或模型置信度，请清空这些筛选条件')
+            from .reference import export_reference_coco
+            report = export_reference_coco(store, version_id, str(target), **params)
+        else:
+            report = entry.factory(store, version_id, str(target), **params)
     except Exception as exc:
         store.update_task(tid, "failed", {"format": fmt, "error": str(exc)})
         raise
