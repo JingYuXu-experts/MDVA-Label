@@ -85,8 +85,8 @@ async function onSubmit() {
         <MInput v-model="name" label="名称" placeholder="如：遥感检测样例" class="grow" />
         <MSelect v-model="type" :options="TYPE_OPTIONS" label="类型" width="160px" />
       </div>
-      <MInput v-model="root" label="数据目录（磁盘绝对路径）" mono
-        placeholder="如：F:\\data\\samples" />
+      <MInput v-model="root" label="数据目录（工作区之内；数据在别处请先用 --data/--out 声明）" mono
+        placeholder="如：./data/newbatch（工作区之外的路径会被服务端拒绝）" />
       <div class="form__row form__row--tight">
         <MButton variant="secondary" size="sm" :loading="scanning" @click="onScan">
           只读探测

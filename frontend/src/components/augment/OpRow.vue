@@ -141,7 +141,7 @@ function enumOptions(s: OpParamSpec) {
         <MInput
           v-else-if="isArray(spec)"
           :model-value="(Array.isArray(state.params[key]) ? (state.params[key] as unknown[]).map(Number) : []).join(', ')"
-          :aria-label="`${meta.name} ${key}（逗号分隔）`"
+          :aria-label="`${meta.name} ${key}（输入用逗号分隔，提交为数组）`"
           @update:model-value="emit('param', key, parseList(String($event)))"
         />
 

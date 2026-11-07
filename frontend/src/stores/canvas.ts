@@ -114,6 +114,18 @@ export const useCanvasStore = defineStore('canvas', () => {
   /** Ann 坐标空间尺寸：有 fit 时 = 内容尺寸/scale，无 fit 时 = 画布尺寸 */
   const srcW = computed(() => (fit.value && fit.value.scale > 0 ? fit.value.w / fit.value.scale : frameW.value))
   const srcH = computed(() => (fit.value && fit.value.scale > 0 ? fit.value.h / fit.value.scale : frameH.value))
+  /**
+   * REQ-W15：后端直接报出的原生宽高（image/cube/video 有值，series/event 为 null）。
+   * 它只用来"把基准说清楚"——换算、叠加层落点、坐标存储一律仍走上面的 fit 映射，
+   * 一行不动（rev9 §5.2 第 4 款：显示改动不得造成任何位移）。
+   * 后端给 null 时界面不显示该项，不得出现 null×null 或自造假尺寸。
+   */
+  const nativeW = ref<number | null>(null)
+  const nativeH = ref<number | null>(null)
+  const nativeShown = computed(() => Number(nativeW.value) > 0 && Number(nativeH.value) > 0)
+  const nativeText = computed(() => (nativeShown.value
+    ? `${Math.round(Number(nativeW.value))}×${Math.round(Number(nativeH.value))}`
+    : ''))
   const tRef = ref<number | null>(null)
   const tEnd = ref<number | null>(null)
   const channels = ref<string[]>([])
@@ -302,6 +314,8 @@ export const useCanvasStore = defineStore('canvas', () => {
       modality.value = String(meta.modality || '')
       if (meta.width) frameW.value = Number(meta.width)
       if (meta.height) frameH.value = Number(meta.height)
+      nativeW.value = Number(meta.native_width) > 0 ? Number(meta.native_width) : null
+      nativeH.value = Number(meta.native_height) > 0 ? Number(meta.native_height) : null
       const info = (meta.info || {}) as Record<string, unknown>
       const f = info.fit
       fit.value = Array.isArray(f) && f.length >= 5 && Number(f[4]) > 0
@@ -461,6 +475,8 @@ export const useCanvasStore = defineStore('canvas', () => {
     currentUri.value = ''
     modality.value = ''
     fit.value = null
+    nativeW.value = null
+    nativeH.value = null
     plotBox.value = null
     draftAnns.value = []
     frameParams.value = { stretch: 'linear', gamma: 1.0, colormap: 'gray', cursor: 0, index: 0, channel: 0 }
@@ -476,6 +492,7 @@ export const useCanvasStore = defineStore('canvas', () => {
   return {
     currentUri, modality, frameW, frameH, frameParams, zoom, loadingFrame,
     fit, plotBox, srcW, srcH, contentRect, toCanvasX, toCanvasY, toNativeX, toNativeY,
+    nativeW, nativeH, nativeShown, nativeText,
     tRef, tEnd, channels, nViews, isTimeModality, timeSpan,
     labelColors, setLabelColors, colorOf,
     draftAnns, mode, label, selId, dirty, loading, saving, selected,

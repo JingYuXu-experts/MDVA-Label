@@ -45,7 +45,7 @@ function num(key: string, s: OpParamSpec, v: number) {
 function hint(s: OpParamSpec): string {
   const base = s.description || ''
   if (!isOptional(s)) return base
-  if (s.type === 'array') return `${base} · 留空=全部（逗号分隔）`
+  if (s.type === 'array') return `${base} · 留空=全部（输入用逗号分隔，提交为数组）`
   if (isNumber(s)) return `${base} · 留空=用后端默认`
   return `${base} · 留空=用后端默认`
 }

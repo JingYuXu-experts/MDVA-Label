@@ -113,6 +113,9 @@ const readPos = ref({ x: 0, y: 0 })
 const hitHalf = computed(() => 6 / store.zoom)
 const visHalf = computed(() => 4 / store.zoom)
 
+/** 读数前缀：后端给出原生尺寸才标 native，null（series/event）时不标——不给同一个数值起第二个名字（rev12 §5.2） */
+const coordBasis = computed(() => (store.nativeShown ? 'native ' : ''))
+
 function geomAllowed(g: Geom): boolean {
   if (g === 'interval' || g === 'level') return store.isTimeModality
   return true
@@ -230,6 +233,11 @@ function onMove(evt: MouseEvent): void {
   if (draft.value) {
     if (draft.value.kind === 'box') { draft.value.x2 = p.x; draft.value.y2 = p.y }
     else if (draft.value.kind === 'interval' || draft.value.kind === 'level') draft.value.b = xToTime(cn.x)
+    // §5.2 交互节拍（v1.4:255）：拖拽中"虚线预览 + 实时坐标读数"是一对，缺一半就不算实时。
+    // 这一句之前只有"拖动已有标注"有读数，画新框全程无读数——rev13 的"读数==读回 coords"
+    // 在画新框这条主路径上根本无从断言（M4-D 真接口验收实测 live_readout=null）。
+    readPos.value = cn
+    readout.value = readText(draftAsAnn(draft.value), p)
     return
   }
   if (dragLocalId.value != null) {
@@ -282,17 +290,35 @@ function onHover(evt: MouseEvent): void {
 }
 function onHoverLeave(): void { hoverHandle.value = null }
 
-/** 拖拽中的实时坐标读数（native 图像像素，mono + tabular-nums） */
-function readText(a: DraftAnn, p: { x: number; y: number }): string {
+/**
+ * 草稿 → 读数用的最小几何视图。
+ * 关键是复用 `normBox` / `Math.min|max`：onUp 入栈用的就是这两个表达式，
+ * 读数走同一套取整规则，§5.2「读数数值 == 保存后 reload 读回的 coords」才不会自成一派。
+ */
+function draftAsAnn(d: NonNullable<Draft>): Pick<DraftAnn, 'geom' | 'coords'> {
+  if (d.kind === 'box') return { geom: 'box', coords: normBox([d.x1, d.y1, d.x2, d.y2]) }
+  return { geom: d.kind, coords: [Math.min(d.a, d.b), Math.max(d.a, d.b)] }
+}
+
+/**
+ * 拖拽中的实时坐标读数（mono + tabular-nums）。
+ * 前缀按 rev12 §5.2：同一个数值只允许一个名字——有原生尺寸可指时就恒标 native，
+ * 后端报 null（series/event 没有原生图像尺寸）时不写前缀，绝不把它改名成"画布 native"
+ * 或谎称存在 native 坐标系（rev9"null 不显示该项"同一条线）。
+ */
+function readText(a: Pick<DraftAnn, 'geom' | 'coords'>, p: { x: number; y: number }): string {
+  // coordBasis 自带尾随空格（'native '），这里绝不能再补一个空格：
+  // 条文写的是 `native W×H @ x,y`，多一个空格就是另一种字符串（rev13 的断言按条文逐字比）。
+  const b = coordBasis.value
   if (a.geom === 'box') {
-    return `${Math.round(a.coords[2] - a.coords[0])}×${Math.round(a.coords[3] - a.coords[1])} @ ${Math.round(a.coords[0])},${Math.round(a.coords[1])}`
+    return `${b}${Math.round(a.coords[2] - a.coords[0])}×${Math.round(a.coords[3] - a.coords[1])} @ ${Math.round(a.coords[0])},${Math.round(a.coords[1])}`
   }
-  if (a.geom === 'point') return `${Math.round(a.coords[0])}, ${Math.round(a.coords[1])}`
+  if (a.geom === 'point') return `${b}${Math.round(a.coords[0])}, ${Math.round(a.coords[1])}`
   if (a.geom === 'poly' && dragHandle >= 0) {
-    return `${Math.round(a.coords[dragHandle * 2])}, ${Math.round(a.coords[dragHandle * 2 + 1])}`
+    return `${b}${Math.round(a.coords[dragHandle * 2])}, ${Math.round(a.coords[dragHandle * 2 + 1])}`
   }
   if (a.geom === 'interval' || a.geom === 'level') return `${(a.coords[1] - a.coords[0]).toFixed(2)} s`
-  return `${Math.round(p.x)}, ${Math.round(p.y)}`
+  return `${b}${Math.round(p.x)}, ${Math.round(p.y)}`
 }
 
 function normBox(c: number[]): number[] {
@@ -517,6 +543,9 @@ onBeforeUnmount(() => { if (throttleTimer) clearTimeout(throttleTimer); unbindGe
         <!-- 拖拽实时读数（跟随光标，mono + tabular-nums） -->
         <text v-if="readout" class="stage__readout" :x="readPos.x + 10" :y="readPos.y + 4">{{ readout }}</text>
       </svg>
+      <!-- 绝对定位角标：不改任何布局，读数的坐标系一眼可辨（rev9 §5.2 验收⑥"不得位移"） -->
+      <span v-if="store.nativeShown" class="stage__native num" data-testid="stage-native"
+        :data-native="store.nativeText">native {{ store.nativeText }}</span>
     </div>
   </div>
 </template>
@@ -540,6 +569,12 @@ onBeforeUnmount(() => { if (throttleTimer) clearTimeout(throttleTimer); unbindGe
 .draft { pointer-events: none; }
 .cursor-line { pointer-events: none; opacity: .8; }
 .stage__readout { font-family: var(--font-mono); font-variant-numeric: tabular-nums; font-size: 11px; fill: var(--text-primary); paint-order: stroke; stroke: #0d0f12; stroke-width: 3; pointer-events: none; }
+.stage__native {
+  position: absolute; left: var(--sp-2); top: 6px; pointer-events: none;
+  font-family: var(--font-mono); font-variant-numeric: tabular-nums; font-size: 10px;
+  color: var(--text-secondary); background: rgba(13, 15, 18, .72);
+  border: 1px solid var(--border); border-radius: var(--radius-control); padding: 0 5px;
+}
 .stage-spinner { position: absolute; top: 50%; left: 50%; z-index: 5; transform: translate(-50%, -50%); }
 .stage-spinner span { display: block; width: 14px; height: 14px; border: 2px solid var(--border-strong); border-top-color: var(--accent); border-radius: 50%; animation: spin .7s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }

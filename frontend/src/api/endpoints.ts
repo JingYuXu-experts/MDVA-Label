@@ -8,6 +8,7 @@ import type {
   HealthResp, WorkspaceRow, DatasetRow, VersionRow, LabelDef, ItemRow,
   StatsResp, ProgressResp, ScanResp, ThumbsResp, TaskRow, AnnRow,
   CollectResp, FrameMeta, PreAnnotateResp,
+  BackendRow, RecommendResp, GateResp, BenchRow, ProbeResp,
   CleanPreviewResp, CleanRollbackResp, DroppedRow,
   AugRecipesResp, AugSuggestResp, AugCheckResp, AugRunResp, AugReplayResp, AugRecipe,
   AugLineageRow,
@@ -18,7 +19,17 @@ import type {
 export const getHealth = () => get<HealthResp>('/health')
 export const getWorkspaces = () => get<{ workspaces: WorkspaceRow[] }>('/workspaces')
 export const rescanWorkspaces = () => post<{ n: number; workspaces: WorkspaceRow[] }>('/workspaces/rescan')
-export const getProbe = () => get<Record<string, unknown>>('/probe')
+export const getProbe = () => get<ProbeResp>('/probe')
+// ---- 5.1b 后端（算法替换）视图（UI规格 §5.6）：筛选参数空值即"不限"，由后端 covers() 解释 ----
+export const getBackends = (domain = '', task = '', modality = '', signal?: AbortSignal) =>
+  get<{ backends: BackendRow[]; n: number }>('/backends', { domain, task, modality }, { signal })
+export const getRecommend = (domain = '', task = '', k = 3, signal?: AbortSignal) =>
+  get<RecommendResp>('/recommend', { domain, task, k }, { signal })
+/** backend 必填（need），threshold 默认 0.90 与后端 _gate 一致 */
+export const getGate = (backend: string, task = '', domain = '', threshold = 0.9, signal?: AbortSignal) =>
+  get<GateResp>('/gate', { backend, task, domain, threshold }, { signal })
+export const getBenchTable = (signal?: AbortSignal) =>
+  get<{ rows: BenchRow[] }>('/bench', {}, { signal })
 export const getOperators = (kind: 'analysis' | 'clean' | 'augment' | 'export' = 'analysis') =>
   get<Record<string, unknown>>('/operators', { kind })
 
