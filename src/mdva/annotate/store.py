@@ -69,7 +69,10 @@ def _migrate_v2_relative_uri(store: "Store") -> None:
     """v1 -> v2（D3）：库内绝对路径 -> 相对工作区根（mdva.sqlite 所在目录）。
 
     只改写得出相对形式的行（路径在工作区之下）；指不到工作区的历史行保持原样——
-    `to_abs` 对绝对路径原样放行，旧库照常可读，绝不因为迁移丢一条标注。
+    迁移一条标注都不删。**REQ-W27 之后**：这类"绝对且在工作区之外"的行由请求边界
+    （`web/routes.guard_paths`）拒绝读取，由命令行与建包脚本照常读取（收口定在接口层，
+    见 `Store.require_within` 的说明）。要把它们交给界面读，启动时把 `--data` 指过去。
+    实测：交付库 `data/mdva.sqlite` 的 item_uri/dataset.root 全部是相对形式，0 条绝对路径。
     """
     db = store.db
     for table in ("annotation", "review"):
@@ -96,6 +99,15 @@ def _new_id(prefix: str = "") -> str:
     return f"{prefix}{uuid.uuid4().hex[:12]}"
 
 
+class OutsideWorkspace(ValueError):
+    """uri / root / target 指到允许的数据目录之外（REQ-W27 的访问边界）。
+
+    它是 `ValueError` 的子类，所以接口层照旧报 400，但报错原文要说清三件事：
+    哪个参数越界、允许的是哪些目录、用户能照着做的下一步是什么。
+    把越界报成"文件不存在"或"未知工作区"都是答非所问。
+    """
+
+
 def _loads(text, default=None):
     if text in (None, ""):
         return default
@@ -105,15 +117,40 @@ def _loads(text, default=None):
         return default
 
 
+def _unique_roots(candidates: Iterable) -> tuple:
+    """允许根集合：解析成绝对、去掉空值与嵌套重复（保留最外层即可判包含性）。"""
+    out: list[Path] = []
+    for item in candidates:
+        text = str(item or "").strip()
+        if not text:
+            continue
+        try:
+            path = Path(text).resolve()
+        except (OSError, RuntimeError):
+            continue
+        if path in out:
+            continue
+        out.append(path)
+    return tuple(out)
+
+
 class Store:
     """一个数据集根目录对应一个库文件（`mdva.sqlite`）。"""
 
-    def __init__(self, db_path):
+    def __init__(self, db_path, extra_roots: Iterable = ()):
         self.path = Path(db_path)
         self.path.parent.mkdir(parents=True, exist_ok=True)
         #: 工作区根 = 库文件所在目录。D3 之后库内 uri 一律相对这里存，
         #: 整个目录拷走 / 换盘符，标注照样能定位到文件。
         self.base = self.path.parent.resolve()
+        #: 允许读写的数据根集合（REQ-W27）。只有启动参数能扩大它，请求参数不能：
+        #: 工作区本身 + `--out`（导出/收录落地的目录）+ `--data`（服务声明的数据树根，
+        #: 已登记的子工作区必然在它之内）。
+        #: **谁在用这份集合**：Web 层在请求边界上（`web/routes.guard_paths`）逐键校；
+        #: `to_abs` 自己不校（PM seq=754 定层：收口落在接口这一层，不下沉到 `Store`/导出层，
+        #: 否则 CLI `--out`/`--out-root`、两个建包脚本、D3 的绝对 uri 用例会一起变红，
+        #: 而那条承诺讲的本来就不是"命令行只能写工作区"）。
+        self.roots = _unique_roots((self.base, *extra_roots))
         # FastAPI 在线程池里跑同步 handler，连接必须跨线程复用 -> 一把全局写锁
         self._lock = threading.RLock()
         self.db = sqlite3.connect(str(self.path), check_same_thread=False)
@@ -162,8 +199,45 @@ class Store:
         except (ValueError, OSError):
             return text
 
+    def require_within(self, path) -> Path:
+        """按允许根校一个候选路径，返回解析后的绝对 Path；越界就拒绝（REQ-W27）。
+
+        两条规则一起才立得住：
+        1. **相对的按工作区算，不按进程 cwd 算**。原先 `scan?root=.` 之所以能枚举整仓，
+           就是因为它走了 `Path(".").resolve()` = 服务是从哪个目录启动的。cwd 不是数据边界，
+           它连"用户想指哪儿"都回答不了；同份库换个目录启动就换一批可见文件，更是不可复现。
+        2. **先 `resolve()` 再判包含性**。`..`、反斜杠、大小写、符号链接在这一步都已经收敛成
+           "实际会打开哪个文件"，判的是目标不是字符串长相——只比字符串前缀会被 `a/../b` 绕开。
+        畸形到解析不动的路径按越界处理（宁可拒绝，也不往下 open）。
+        """
+        p = Path(str(path or ""))
+        if not p.is_absolute():
+            p = self.base / p
+        try:
+            resolved = p.resolve()
+        except (OSError, RuntimeError):
+            resolved = p
+        for root in self.roots:
+            try:
+                resolved.relative_to(root)
+            except ValueError:
+                continue
+            return resolved
+        # W27-7：拒绝的原文要能诊断，但不许把服务端/操作系统的路径吐回客户端。
+        # 所以这里只回显调用方自己送进来的那个值，允许根的绝对清单一个都不印。
+        raise OutsideWorkspace(
+            f"路径越界：{path} 不在启动参数声明的数据目录之内。"
+            f"接口只认工作区之内的 uri/root/target/out_dir；数据放在别的目录时，"
+            f"启动时用 --data 或 --out 指向那个目录（请求参数不能自己声明根）")
+
     def to_abs(self, uri) -> str:
-        """文件访问前的还原：相对 uri 拼回工作区根；绝对路径原样放行（旧库兼容）。"""
+        """文件访问前的还原：相对 uri 拼回工作区根，绝对 uri 原样交给引擎。
+
+        这里不加包含性校验是**定层结果**，不是遗漏（PM seq=754）：`uri=` 越界的收口落在
+        请求边界 `web/routes.guard_paths`，命令行与建包脚本本来就是启动参数的主人。
+        「绝对路径原样放行（旧库兼容）」这句注释此前被当成放行的理由——那是 REQ-W27 的洞，
+        洞在**请求参数可以自带根**，不在引擎能解析绝对路径。
+        """
         text = str(uri or "")
         if not text:
             return text

@@ -168,9 +168,13 @@ def _overlay_anns(overlay, backend: str = "", index: Optional[int] = None) -> li
 class Hub:
     """一个工作区（一个 mdva.sqlite）对应一个 Hub。线程安全靠 Store 的写锁 + 只读渲染。"""
 
-    def __init__(self, db_path, out_dir=None):
+    def __init__(self, db_path, out_dir=None, data_root=None):
         self.path = Path(db_path)
-        self.store = Store(self.path)
+        # 允许根只有这三个来源，且全部来自启动参数（REQ-W27）：工作区本身由 Store 自己算，
+        # out_dir 是导出/收录落地点，data_root 是 `--data` 声明的整棵数据树。
+        # 这份集合由请求边界的 `routes.guard_paths` 执行；`to_abs` 自己不判（定层结论：
+        # 命令行与建包脚本本来就是启动参数的主人）。
+        self.store = Store(self.path, extra_roots=(out_dir, data_root))
         self.out_dir = Path(out_dir) if out_dir else self.path.parent / "out"
         self._frames: dict = {}
         self._frame_order: list = []
@@ -382,7 +386,7 @@ class Hub:
         return out
 
     def _disk_uris(self, dataset: dict, modality: str) -> list:
-        root = Path(dataset.get("root") or ".")
+        root = self._dataset_root(dataset)
         if not root.is_dir():
             return []
         # D3：磁盘扫描出来的是绝对路径，统一转成与库内一致的相对 uri，
@@ -860,12 +864,20 @@ class Hub:
                                          workers=int(params.get("workers") or 0),
                                          enforce_gate=bool(params.get("enforce_gate", True)))))
 
+    def _dataset_root(self, dataset: dict) -> Path:
+        """数据集根目录的磁盘形态；库里为空时退回工作区 base，**绝不退回进程 cwd**。
+
+        这里原来是 `Path(dataset.get("root") or ".")`：那个 `"."` 看着无害，实际是把
+        "服务从哪个目录启动"变成了数据可见范围的一部分（REQ-W27 的 W27-3 追加项）。
+        """
+        root = str(dataset.get("root") or "").strip()
+        return Path(root) if root else self.store.base
+
     def _dataset_root_of_version(self, version_id: str) -> Path:
         version = self.store.get_version(version_id)
         if version is None:
             raise KeyError(f"未知版本 {version_id}")
-        dataset = self.store.get_dataset(version["dataset_id"]) or {}
-        return Path(dataset.get("root") or ".")
+        return self._dataset_root(self.store.get_dataset(version["dataset_id"]) or {})
 
     # ------------------------------------------------------------------ 清洗与增强
 
@@ -946,6 +958,9 @@ class Hub:
                out_dir: str = "", make_scripts: bool = False) -> dict:
         from .. import export as EXP
 
+        # `out_dir` 是写侧参数，越界收口在请求边界（routes.guard_paths）做：
+        # 这里保持"缺省落在 --out 之下"，进程内调用（CLI `mdva export --out`、建包脚本）
+        # 仍然是启动参数的主人，不受这道边界影响（PM seq=752 裁定 1）。
         return self._rel(_plain(EXP.export(self.store, version_id, fmt,
                                            out_dir=out_dir or str(self.out_dir / "export" / fmt),
                                            make_scripts=bool(make_scripts), **(params or {}))))

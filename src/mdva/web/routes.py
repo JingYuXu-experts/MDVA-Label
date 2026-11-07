@@ -15,6 +15,7 @@
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import dataclass, field
 from typing import Any, Callable, Optional, Sequence
 
@@ -149,6 +150,13 @@ class Params:
             raise Bad(f"参数 {key} 要的是对象，收到 {type(value).__name__}")
         return dict(value)
 
+    def rewrite(self, key: str, value) -> None:
+        """把收口归一后的值写回原处（请求体优先，与 `raw()` 的取用顺序一致）。"""
+        if key in self._b:
+            self._b[key] = value
+        else:
+            self._q[key] = value
+
     def pair(self, key: str, default: tuple = DEFAULT_CELL) -> tuple:
         """缩略图边长一类的成对参数：`196x122`、`[196,122]`、`196,122` 都认。"""
         value = self.raw(key, None)
@@ -173,6 +181,16 @@ class Params:
         if not isinstance(value, (list, tuple)):
             raise Bad(f"参数 {key} 要是标注数组")
         return list(value)
+
+    def inbound(self) -> dict:
+        """全部入站键的合并视图（请求体优先），**含**路由键——给递归路径尺用。
+
+        与 `rest()` 的差别就是存在的理由：`rest()` 按 `ROUTING_KEYS` 挡键，而路径值可以
+        藏在 `params` 整包嵌套里；`guard_paths` 要看的是"这次请求送进来的每一个值"。
+        """
+        merged = dict(self._q)
+        merged.update(self._b)
+        return merged
 
     def rest(self, exclude: Sequence = ROUTING_KEYS) -> dict:
         """路由自己不用的其余参数，原样给下层（services 各方法自己按名字取）。"""
@@ -744,6 +762,83 @@ def paths() -> list[dict]:
             for r in ordered]
 
 
+#: 请求里带磁盘路径的键——数据分析 seq=751 那张"键 × 收口点"表的落点版。
+#: `uri/uris/target/dir/manifest/calibration` 本来就会走进 `store.to_abs`；
+#: `root`（scan/bench/datasets）与 `out_dir`（export）**根本不进 to_abs**，
+#: 所以收口必须做在这一层（请求边界），而不是往每个方法里补检查——PM seq=752 裁定 2：
+#: 边界落在攻击者唯一进得来的那个面上，CLI/建包脚本（=启动参数的主人）不受影响。
+PATH_KEYS = ("uri", "uris", "root", "target", "out_dir", "dir", "manifest", "calibration")
+
+#: 会最终到达文件系统的路径值所在的键名（REQ-W27 覆盖面）。**判据不是这张表**——判据是
+#: "值会不会到达文件系统"（PM seq=794 §一 裁定：键名清单降级为实现细节）。表里必须有
+#: `source_uri` 这类**不在 `PATH_KEYS`、却经 `rest()` 与 `params` 两个门进来**的键：
+#: `_smart_params` 把除 `ROUTING_KEYS` 外的入站键全收，`services.prompt_from` 再把它送进
+#: `to_abs -> resolve_prompt`，`PATH_KEYS` 那把尺结构上看不见它。
+#: **但名单本身不收敛**（判据附件 §2 门 5：`specs[].reference` 既不在 `PATH_KEYS`、也不在
+#: 任何人列过的清单里，`clean/task.py:51-53` 把 `specs[]` 除 `name/op/params` 外的任意键
+#: 并进算子参数）。所以本实现是两层：登记名一层（管得住门 1–5 这些**已经数出来的**名字），
+#: **"其余全收"面上按路径形态再扫一层**（不看键名），后者管的是"下一枚没人登记过的名字"。
+#: 漏登记会被 `tests/mdva/test_web_containment.py` 的两把尺当场抓红（行为面 a–f + 消费点静态尺）。
+PATH_VALUE_KEYS = PATH_KEYS + ("source_uri", "src", "dst", "weights", "checkpoint",
+                               "image_path", "reference", "template_uri")
+
+#: 自由文本载体：`anns`/`ann` 里的 `label`/`note`、审核 `reason`、数据集 `labels` 这类**人写的
+#: 文字**只按登记名校验、不按形态校验——否则评审在驳回理由里打一句 `见 C:\docs\spec` 就会把
+#: 整个请求判死（那是"修过头"，W27-2 防的就是它）。名单以外的键（算法 knob、specs、params…）
+#: 一律进形态层：往 knob 里塞绝对路径照样拒，这一条就是"下一枚没人登记过的名字"的背板。
+FREE_TEXT_KEYS = ("anns", "ann", "labels", "reason", "note", "text", "comment", "message")
+
+#: 路径形态判据：绝对形态（盘符 / UNC / 以 `/` 开头）或含 `..` 段。相对且无 `..` 的值不扫——
+#: 那类值本来就按工作区 base 解析，天然落在允许根内。
+_PATH_SHAPE = re.compile(r"(?:^[A-Za-z]:[\\/]|^\\\\|^/|(?:^|[/\\])\.\.(?:[/\\]|$))")
+
+
+def _check_path_values(node, store, key=None, text_carrier=False) -> None:
+    """递归校全部入站结构：登记名一律过尺；非自由文本的"其余全收"面上，路径形态的值也过尺。
+
+    与层位无关，所以顶层 `?source_uri=`、请求体 `source_uri`、`params` 嵌套位、
+    `specs[].prompts[].source_uri`、`specs[].reference` 走的是同一把尺——数据分析判据附件
+    §4 的 a–e 五道门一次关掉，且新增字段名不需要再改这张表（形态层兜着）。
+    """
+    carrier = text_carrier or (key in FREE_TEXT_KEYS)
+    if isinstance(node, dict):
+        for sub_key, value in node.items():
+            _check_path_values(value, store, str(sub_key), carrier)
+    elif isinstance(node, (list, tuple)):
+        for value in node:
+            _check_path_values(value, store, key, carrier)
+    elif isinstance(node, str) and node.strip():
+        if key in PATH_VALUE_KEYS:
+            store.require_within(node)
+        elif not carrier and _PATH_SHAPE.search(node):
+            store.require_within(node)
+
+
+def guard_paths(p: "Params", hub) -> None:
+    """在任何遍历 / open / 落盘之前，把路径参数校到允许根之内并归一（REQ-W27）。
+
+    两件事一起做，缺一件都不算收口：
+    1. **校**：越界 ⇒ `OutsideWorkspace`（路由层 400，原文点到被拒的那个值，不回显服务端路径）。
+       它发生在 handler 之前，所以 `scan?root=C:\\Windows` 不会再走一遍系统盘（W27-6），
+       也不会再冒出 `[Errno 13] Permission denied` + 系统路径那种答非所问（W27-7）。
+    2. **归一**：相对的按工作区 base 算、绝对的解析干净，再交回 handler。
+       只校不改的话，`.` 这类值仍会在 handler 里被解析成服务进程的 cwd（W27-3 追加项）——
+       边界判对了、行为却走偏，是"键存在 ≠ 收口命中"的另一种形态。
+    """
+    store = hub.store
+    for key in PATH_KEYS:
+        if not p.has(key):
+            continue
+        value = p.raw(key)
+        if isinstance(value, (list, tuple)):
+            p.rewrite(key, [str(store.require_within(v)) for v in value if str(v or "").strip()])
+        elif str(value or "").strip():
+            p.rewrite(key, str(store.require_within(value)))
+    # 第二把尺：`rest()`/`params` 嵌套位上的路径值不在 PATH_KEYS 里（`source_uri` 就是这枚，
+    # 判据附件 v1.0 §2 实测五道门全是 200 且真读）。判据按消费点，不按键名。
+    _check_path_values(p.inbound(), store)
+
+
 def status_for(exc: Exception) -> int:
     """异常 -> HTTP 状态码：越权 403、找不到 404、参数不对 400，其余 500。"""
     from ..annotate.state import PermissionDenied
@@ -784,6 +879,7 @@ def call(workspaces: Workspaces, method: str, path: str,
                                         f"收到 {method}"}, 405)
         return Response.of({"error": f"未知接口 {key[1]}"}, 404)
     try:
+        guard_paths(p, hub)
         return Response.of(found.handler(Ctx(workspaces, hub, p, p.text("ws"))))
     except Exception as exc:      # noqa: BLE001 - 接口不能把异常原样抛给浏览器
         status = status_for(exc)

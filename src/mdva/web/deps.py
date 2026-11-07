@@ -3,6 +3,12 @@
 界面只认工作区**名字**，不认路径：请求里出现的是 `ws=aerospace` 这样的键，
 服务端从这张表里查。路径由启动参数一次性扫描确定，之后任何请求都没法
 指到扫描结果之外的文件——否则一个只绑 127.0.0.1 的接口就成了读任意文件的口子。
+
+这句话在 `ws` 名字面一直是真的；在 `uri`/`root`/`target` 参数面到 REQ-W27 才真的落实
+（`annotate/store.Store.to_abs` / `require_within`：解析后必须落在允许根之内，允许根只有
+工作区 base、`--out`、`--data` 三个来源，全部来自启动参数）。数据放在别的目录（外盘、
+网络盘）时的正确做法是把 `--data`/`--out` 指过去，在启动时声明一次，
+而不是让每个请求自己带一个根路径进来。
 """
 
 from __future__ import annotations
@@ -96,7 +102,9 @@ class Workspaces:
         with self._lock:
             hub = self._hubs.get(name)
             if hub is None:
-                hub = Hub(row["db"], out_dir=self.out_dir)
+                # 允许根在这里定齐（REQ-W27）：工作区 base（Store 自己算）+ `--out` + `--data` 根。
+                # 已登记的子工作区必然在 `--data` 根之内，所以不需要单独列举。
+                hub = Hub(row["db"], out_dir=self.out_dir, data_root=self.root)
                 self._hubs[name] = hub
             return hub
 
