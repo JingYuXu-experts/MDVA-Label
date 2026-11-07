@@ -29,6 +29,7 @@ export interface DatasetRow {
   head: string
   n_annotations: number
   head_annotations: number
+  n_items: number
 }
 
 export interface VersionRow {

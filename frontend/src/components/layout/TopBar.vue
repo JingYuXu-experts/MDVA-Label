@@ -33,7 +33,8 @@ const wsOptions = computed(() =>
   ctx.workspaces.map(w => ({ value: w.ws, label: w.ws === "." ? "默认工作区" : w.ws })))
 
 const datasetOptions = computed(() =>
-  ctx.datasets.map(d => ({ value: d.id, label: d.name, hint: d.type })))
+  ctx.datasets.map(d => ({ value: d.id, label: d.name,
+    hint: d.meta?.indexed ? `${d.n_items.toLocaleString()} 张` : d.type })))
 
 function fmtTime(created: number | null | undefined): string {
   if (!created) return ''

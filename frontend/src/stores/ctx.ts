@@ -84,9 +84,13 @@ export const useCtxStore = defineStore('ctx', () => {
   async function loadDatasets() {
     const resp = await api.getDatasets()
     datasets.value = resp.datasets
-    // 当前选择失效时回退到第一个
+    // 首次进入优先完整的只读源索引，避免最新验收样本遮住完整数据。
+    // URL 中明确指定的有效数据集仍然保留。
     if (!datasets.value.some(d => d.id === dataset.value)) {
-      dataset.value = datasets.value[0]?.id || ''
+      const sourceDatasets = datasets.value.filter(d => d.meta?.indexed && d.meta?.source_id)
+      const fullest = sourceDatasets.reduce<DatasetRow | undefined>((best, d) =>
+        !best || d.n_items > best.n_items ? d : best, undefined)
+      dataset.value = fullest?.id || datasets.value[0]?.id || ''
     }
   }
 

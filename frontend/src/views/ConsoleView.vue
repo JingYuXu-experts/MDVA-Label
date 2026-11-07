@@ -58,6 +58,12 @@ const modalityOptions = computed(() => [
 
 const pageCount = computed(() => Math.max(1, Math.ceil(itemsStore.total / pageSize.value)))
 const paged = computed(() => itemsStore.items)
+const fullSourceDataset = computed(() => {
+  const current = ctx.currentDataset
+  if (!current?.meta?.source_id) return null
+  return ctx.datasets.filter(d => d.meta?.source_id === current.meta.source_id && d.n_items > current.n_items)
+    .sort((a, b) => b.n_items - a.n_items)[0] || null
+})
 const pageRange = computed(() => itemsStore.total
   ? `${(page.value-1)*pageSize.value+1}–${Math.min(page.value*pageSize.value, itemsStore.total)} / ${itemsStore.total}` : '0')
 
@@ -179,6 +185,15 @@ function onRowClick(row: ItemRow) {
       </MButton>
     </section>
 
+    <div class="dataset-context" aria-label="当前数据范围">
+      <span>当前：{{ ctx.currentDataset?.name || '未选择数据集' }}
+        <template v-if="ctx.currentDataset?.meta?.indexed"> · 索引共 {{ ctx.currentDataset.n_items.toLocaleString() }} 张</template>
+        · 当前筛选 {{ itemsStore.total.toLocaleString() }} 张 · 每页 {{ pageSize }} 张</span>
+      <MButton v-if="fullSourceDataset" variant="secondary" size="sm" @click="ctx.setDataset(fullSourceDataset.id)">
+        查看完整数据（{{ fullSourceDataset.n_items.toLocaleString() }} 张）
+      </MButton>
+    </div>
+
     <!-- 主区：左列表 + 右详情 -->
     <div class="body">
       <section class="listpane">
@@ -228,6 +243,7 @@ function onRowClick(row: ItemRow) {
 
 <style scoped>
 .console { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.dataset-context { display:flex; align-items:center; flex-wrap:wrap; gap:12px; padding:0 var(--sp-3) var(--sp-2); color:var(--text-secondary); font-size:12px; flex:none; }
 .statsbar {
   display: flex; gap: var(--sp-2); padding: var(--sp-3) var(--sp-3) 0;
   flex: none; flex-wrap: wrap;
