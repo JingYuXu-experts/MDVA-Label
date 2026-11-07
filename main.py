@@ -12,6 +12,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parent / "src"))
 
 
 def main() -> int:
+    if len(sys.argv) == 1:
+        from launcher import main as launch
+        return launch()
     try:
         from mdva.cli import main as run
     except ImportError as exc:
@@ -20,15 +23,7 @@ def main() -> int:
         print("缺的是这个解释器所在的包。请双击 install.bat 装依赖，")
         print("或者在已装好依赖的环境里运行：python main.py")
         return 1
-    if len(sys.argv) > 1:
-        return run(sys.argv[1:])
-    root = Path(__file__).resolve().parent
-    (root / 'data').mkdir(exist_ok=True)
-    args = ['serve', '--data', str(root / 'data'), '--out', str(root / 'out'), '--open', '--reuse']
-    source = root / 'datas of importance' / 'Situation Awareness Dataset'
-    if source.is_dir():
-        args.extend(['--source', 'ssafd=' + str(source)])
-    return run(args)
+    return run(sys.argv[1:])
 
 
 if __name__ == "__main__":

@@ -33,6 +33,7 @@ frontend/dist/
 .qoder/
 .qoder-collab-runtime/
 .qoder-sop-runtime/
+.mdva/
 
 # 系统
 Thumbs.db
