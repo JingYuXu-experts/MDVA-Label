@@ -366,6 +366,169 @@ def test_subworkspace_context_refuses_outside_payloads(tmp_path):
         ws.close()
 
 
+# ------------------------------------------------- 消费点覆盖面：不经 PATH_KEYS 的路径值（W27-9）
+
+@pytest.mark.parametrize("door", ["body", "query", "params_nested"])
+def test_inbound_path_value_outside_is_refused_whichever_door_it_enters(live, arena, door,
+                                                                        monkeypatch):
+    """`source_uri` 不在八键里，却经 `rest()` 与 `params` 两个门进 `to_abs`（判据附件 v1.0 §2）。
+
+    覆盖面按**消费点**判、不按键名判（PM seq=794 §一 / seq=799 §一 例外句）：三个门各一条，
+    只补顶层仍会漏嵌套门。断言两件事：400 可诊断原文 + **引擎一次都没 open 那枚区外文件**
+    （状态码证明不了读没读到，所以钉一把 `builtins.open` 记录器）。
+    """
+    from mdva.web import routes
+
+    inside, leak = str(arena.inside), str(arena.secret_png)
+    box = [2, 2, 18, 12]
+    if door == "body":
+        query, body = None, {"uri": inside, "kind": "box", "coords": box, "source_uri": leak}
+    elif door == "query":
+        query = {"uri": inside, "kind": "box", "coords": "2,2,18,12", "source_uri": leak}
+        body = None
+    else:                                          # 门 3：params 整包嵌套位
+        query, body = None, {"uri": inside, "kind": "box", "coords": box,
+                             "params": {"source_uri": leak}}
+
+    opened = []
+    real_open = open
+
+    def spy(*args, **kwargs):
+        try:
+            opened.append(os.path.normcase(str(args[0])))
+        except Exception:
+            pass
+        return real_open(*args, **kwargs)
+
+    monkeypatch.setattr("builtins.open", spy)
+    res = call(live.ws, "POST", "/api/smart/same_image", query, body)
+    text = str(res.json_body.get("error", "")) if isinstance(res.json_body, dict) else ""
+    assert res.status == 400, (door, res.status, text)
+    assert "越界" in text and "未知工作区" not in text, (door, text)
+    assert sum(1 for p in opened if os.path.normcase(leak) in p) == 0, \
+        f"{door} 门拒了但文件已经被读过一次"
+    assert routes.PATH_KEYS and "source_uri" not in routes.PATH_KEYS, \
+        "PATH_KEYS 里出现 source_uri ⇒ 本条的覆盖面口径要跟着改（键名清单已不是八个）"
+
+
+@pytest.mark.parametrize("door", ["specs_prompts", "specs_reference", "inside_positive"])
+def test_clean_side_doors_use_the_same_ruler(live, arena, door):
+    """清洗侧三道门（判据附件 §4 的 d/e/f）：`specs[]` 里除 `name/op/params` 外的**任意键**都会被
+    `clean/task.py:51-53` 并进算子参数 ⇒ **字段名永远追不完**，门 5 的 `reference` 就是证明。
+
+    d/e 期望 400（拒在 handler 之前），f 是区内正对照：同形状指区内文件必须 200，否则就是把
+    已验收的"模板钉死"用法判死了——与 `out_dir`、`source_uri` 那两条同形的另一半。
+    """
+    inside, leak = str(arena.inside), str(arena.secret_png)
+    target = inside if door == "inside_positive" else leak
+    prompt = {"kind": "box", "coords": [2, 2, 18, 12]}
+    if door in ("specs_prompts", "inside_positive"):
+        prompt["source_uri"] = target
+    spec = {"name": "content_filter", "rule": "keep_if_matched", "prompts": [dict(prompt)]}
+    if door == "specs_reference":
+        spec["reference"] = target
+    res = call(live.ws, "POST", "/api/clean/preview", None, {"uris": [inside], "specs": [spec]})
+    text = str(res.json_body.get("error", "")) if isinstance(res.json_body, dict) else ""
+    if door == "inside_positive":
+        assert res.status == 200, (res.status, text)
+        assert "越界" not in text
+    else:
+        assert res.status == 400 and "越界" in text, (door, res.status, text)
+        assert "未知工作区" not in text, (door, text)
+
+
+def test_unregistered_knob_carrying_an_absolute_path_is_refused(live, arena):
+    """形态层背板（挡"下一枚没人登记过的名字"的那一层）：字段名谁都没登记过，值长得像区外路径就照样拒。
+
+    这条不是在测 `reference`——它测的是**下一次**有人在 `specs[]`/`params` 里加一枚新名字而没
+    进任何清单时的行为。判据附件 §2 的结论是"按键名穷举不收敛"，所以实现不能只靠名单。
+    """
+    res = call(live.ws, "POST", "/api/clean/preview", None,
+               {"uris": [str(arena.inside)],
+                "specs": [{"name": "content_filter", "rule": "keep_if_matched",
+                           "prompts": [{"kind": "box", "coords": [2, 2, 18, 12]}],
+                           "brand_new_field_nobody_registered": str(arena.secret_png)}]})
+    text = str(res.json_body.get("error", "")) if isinstance(res.json_body, dict) else ""
+    assert res.status == 400 and "越界" in text, (res.status, text)
+
+
+def test_free_text_carrying_a_path_like_string_is_not_refused(tmp_path):
+    """背板的边界（W27-2 同族的"修过头"防线）：人写的文字里出现路径字样不算越界。
+
+    评审在驳回理由里打一句 `见 C:\\docs\\spec.png`、或数据集类别名里带 `/`，都是合法输入；
+    形态层对 `anns`/`labels`/`reason` 这类自由文本载体不生效，只有登记名那一层管它们。
+    """
+    data_root = tmp_path / "data"
+    _png(data_root / "imgs" / "a.png", (200, 20, 20))
+    Store(data_root / "mdva.sqlite").close()
+    ws = Workspaces(data_root)
+    try:
+        ok = call(ws, "POST", "/api/datasets", None,
+                  {"name": "自由文本", "type": "detection", "root": str(data_root / "imgs"),
+                   "labels": ["/home/data/类别", "C:\\docs\\spec.png", "见 ../note"]})
+        assert ok.status == 200, (ok.status, ok.json_body)
+    finally:
+        ws.close()
+
+
+def test_inbound_path_value_inside_still_works_as_template(live, arena):
+    """两对照的另一半：`test_web.py:300` 的已验收用法（区内 `source_uri == uri`）不许误杀。"""
+    inside = str(arena.inside)
+    plain = call(live.ws, "POST", "/api/smart/same_image", None,
+                 {"uri": inside, "kind": "box", "coords": [2, 2, 18, 12],
+                  "source_uri": inside})
+    assert plain.status == 200, (plain.status, plain.json_body)
+    nested = call(live.ws, "POST", "/api/smart/same_image", None,
+                  {"uri": inside, "kind": "box", "coords": [2, 2, 18, 12],
+                   "params": {"source_uri": inside}})
+    assert nested.status == 200, (nested.status, nested.json_body)
+
+
+def test_path_value_registry_covers_web_consumers():
+    """消费点尺的可执行版：web 层里"从入站参数字典取值 → 送进路径函数"的键名必须在清单里。
+
+    机理是 `routes._smart_params` 的 `params.update(p.rest())`——除 `ROUTING_KEYS` 外全收，
+    所以键名白名单结构上罩不住"其余全收"的入站面。这条门的作用就是：**下一次**再有人加一枚
+    `params.get("某_uri")` 直接进 `to_abs` 而没登记，当场红（PM seq=799：写死键名第三次会
+    再失效——第二次是 seq=754「经 to_abs 的算一格」，第三次是这次，根因同一个）。
+    末了那条"对照 0"是尺子自身的否决权：扫描必须真的抓得到 `source_uri`，抓不到就说明
+    这把尺已经瞎了，不许把"没红"写成"通过"。
+    """
+    import ast
+    import re
+    from mdva.web import routes
+
+    root = Path(routes.__file__).resolve().parents[3]        # .../src/mdva/web/routes.py -> 仓根
+    consumers = re.compile(r"to_abs\(|load_any\(|resolve_prompt\(|require_within\(")
+    getter = re.compile(r"""params(?:\.get\(|\[)\s*["']([A-Za-z_][A-Za-z0-9_]*)["']""")
+    reviewed_non_path = {"kind", "coords", "label", "role", "backend", "backend_params",
+                         "workers", "executor", "state", "modality", "limit", "threshold",
+                         "rule", "prompts", "name", "op", "nsigma",
+                         "analyzer_params", "cell_height", "cell_width", "cols", "rows"}
+    # 这份"已核非路径"名单**不是豁免面**：`_check_path_values` 的形态层（Tier B）照样扫这些键
+    # 的值，往里塞绝对路径或 `..` 依然 400——所以登记缺失只影响"精确名"这一层，不影响背板。
+    found, missing = set(), set()
+    scan_files = ("src/mdva/web/services.py", "src/mdva/web/routes.py",
+                  "src/mdva/clean/task.py", "src/mdva/clean/ops.py",
+                  "src/mdva/annotate/prompts.py")
+    for rel in scan_files:
+        text = (root / rel).read_text(encoding="utf-8")
+        tree = ast.parse(text)
+        for node in ast.walk(tree):
+            if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                continue
+            body = ast.get_source_segment(text, node) or ""
+            if consumers.search(body):
+                names = set(getter.findall(body))
+                found |= names
+                missing |= names - set(routes.PATH_VALUE_KEYS) - reviewed_non_path
+    assert not missing, (f"这些入站键会到达文件系统却没登记进 PATH_VALUE_KEYS："
+                         f"{sorted(missing)}（扫描面 {scan_files}）")
+    # 对照 0（尺子自身的否决权）：这两枚都必须真被抓到，抓不到说明尺瞎了，不是"通过"。
+    # `reference` 是判据附件 §2 门 5——它既不在 PATH_KEYS，也不在任何人列过的清单里。
+    assert {"source_uri", "reference"} <= found, f"消费点尺没抓到这两枚键，扫描本身失效：{sorted(found)}"
+
+
 # ---------------------------------------------------------------- 落点两半：边界内 vs 命令行
 
 def test_in_process_callers_keep_absolute_uris(arena):
