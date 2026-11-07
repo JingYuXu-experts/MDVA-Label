@@ -252,6 +252,42 @@ def test_write_side_export_refuses_outside_out_dir_and_keeps_default(live, arena
     assert ok == 200, error_of(body)                                 # 正对照：默认落点没被误杀
 
 
+@pytest.mark.parametrize("declared", [True, False])
+def test_out_dir_follows_startup_declaration_only(tmp_path, declared):
+    """`out_dir` 判据的两对照（PM seq=764 §三、seq=782 派单）：扩大允许集只属于启动参数。
+
+    同一个靶——工作区之外、且**事先不存在**的目录——只在 `--out` 声明与否上分两形：
+    声明 ⇒ 200 且真落盘（含目录尚未创建）；未声明 ⇒ 400 且一个目录都不许建。
+    未声明那形还顺带钉住一条脆机关：`Hub` 的隐式默认落点（库旁 `out/`）**不得无条件进
+    roots**——`services.py:177` 用的是入参、`:178` 才补默认，谁把这两行调换顺序这条就红。
+    """
+    data_root = tmp_path / "data" / "ws"
+    target = tmp_path / "挂载盘out"                    # 在工作区之外，故意不预先创建
+    _png(data_root / "imgs" / "a.png", (200, 20, 20))
+    Store(data_root / "mdva.sqlite").close()
+    ws = Workspaces(data_root, out_dir=str(target) if declared else None)
+    try:
+        hub = ws.hub(None)
+        created = call(ws, "POST", "/api/datasets", None,
+                       {"name": "两形", "type": "detection", "root": str(data_root / "imgs")})
+        assert created.status == 200, created.json_body
+        res = call(ws, "POST", "/api/export", None, {"version": created.json_body["version_id"],
+                                                     "format": "coco",
+                                                     "out_dir": str(target / "sub")})
+        text = str(res.json_body.get("error", "")) if isinstance(res.json_body, dict) else ""
+        if declared:
+            assert res.status == 200, (res.status, text)
+            assert (target / "sub").is_dir(), "200 但目录没建出来"
+            assert list((target / "sub").glob("*.json")), "200 但没有真落盘产物"
+        else:
+            assert res.status == 400 and "越界" in text, (res.status, text)
+            assert not target.exists(), "拒了却顺手把目录建出来了"
+            assert Path(hub.out_dir).resolve() not in hub.store.roots      # 隐式默认没进允许根
+            assert hub.out_dir == data_root / "out"                        # 缺省落点照旧
+    finally:
+        ws.close()
+
+
 # ---------------------------------------------------------------------- 正对照与子工作区
 
 def test_inside_entries_still_render_as_real_png(live, arena):
@@ -289,6 +325,45 @@ def test_subworkspace_entries_remain_readable(tmp_path):
                                            "width": 32, "height": 32})
     assert frame.status == 200 and frame.data and frame.data.startswith(b"\x89PNG")
     ws.close()
+
+
+def test_subworkspace_context_refuses_outside_payloads(tmp_path):
+    """W27-9 覆盖面：`ws=<子工作区>` 与越界载荷的**组合**（此前所有拒侧断言都在顶层 ws 语境）。
+
+    数据分析 seq=779 §二 实测确认的唯一真缺口：正对照（子工作区可读）在 `:269` 已有，
+    缺的是"子工作区语境下越界仍被拒"。允许根 = `lab` 自己的 base ∪ 启动声明的 data_root，
+    所以 data_root 之外的载荷照样必须 400，而且要拒在遍历之前、原文可诊断、不回显服务端路径。
+    """
+    data_root = tmp_path / "data"
+    sub = data_root / "lab"
+    _png(sub / "cases" / "one.png", (11, 220, 33))
+    Store(sub / "mdva.sqlite").close()                               # 建库即完成登记
+    leak = _png(tmp_path / "elsewhere" / "LEAK.png")                 # 真文件：拒的必须是边界
+    ws = Workspaces(data_root)
+    try:
+        created = call(ws, "POST", "/api/datasets", {"ws": "lab"},
+                       {"name": "子工作区边界", "type": "detection", "root": str(sub / "cases")})
+        assert created.status == 200, created.json_body
+        ok = call(ws, "GET", "/api/frame", {"ws": "lab", "uri": "cases/one.png",
+                                            "width": 32, "height": 32})
+        assert ok.status == 200 and ok.data and ok.data.startswith(b"\x89PNG")   # 正对照
+
+        rel = os.path.relpath(leak, sub).replace("\\", "/")           # ../.. /elsewhere/LEAK.png
+        assert rel.startswith("..")
+        for label, value in (("绝对路径", str(leak)), ("相对上跳", rel)):
+            res = call(ws, "GET", "/api/frame", {"ws": "lab", "uri": value,
+                                                 "width": 32, "height": 32})
+            text = str(res.json_body.get("error", "")) if isinstance(res.json_body, dict) else ""
+            assert res.status == 400, (label, res.status, text)
+            assert "越界" in text and "未知工作区" not in text, (label, text)   # 答其所问
+            assert str(data_root) not in text, f"{label} 回显了服务端路径"        # W27-7
+            assert not (res.data or b"").startswith(b"\x89PNG")                   # 内容没出去
+
+        scan = call(ws, "GET", "/api/scan", {"ws": "lab", "root": str(leak.parent)})
+        stext = str(scan.json_body.get("error", "")) if isinstance(scan.json_body, dict) else ""
+        assert scan.status == 400 and "越界" in stext, (scan.status, stext)
+    finally:
+        ws.close()
 
 
 # ---------------------------------------------------------------- 落点两半：边界内 vs 命令行
