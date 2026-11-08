@@ -2,12 +2,12 @@
 
 # MDVA
 
-**本地化多模态科研标注平台**
+**【开发中】面向太阳结构识别与数据整理的本地科研标注平台**
 Localized Multi-modal Data Annotation & Augmentation Platform
 
 完全离线 · 只绑 `127.0.0.1` · 数据不出机器 · 零出站请求
 
-`GPL-3.0` · `Python 3.10+` · `Vue 3 + TypeScript` · `617 项自动化测试` · `63 个本地 HTTP 接口`
+`开发中 / Work in progress` · `GPL-3.0` · `Python 3.10+` · `Vue 3 + TypeScript`
 
 </div>
 
@@ -16,6 +16,29 @@ Localized Multi-modal Data Annotation & Augmentation Platform
 > 一份科研数据集，往往同时躺着 FITS 数据立方、病理切片、示波器时序、事件触发流和实验视频。
 > 标注工具各管一种，脚本各写一套，清洗与增强在另一个仓库里，最后没人说得清这批数据是**谁、用什么参数、在哪一版**上产出的。
 > MDVA 把这些环节收进**一个进程、一个 SQLite 真源、一条可追溯的版本链**，并且全程不联网。
+
+---
+
+## 开发状态与当前方向
+
+**本项目正在开发中，尚未作为稳定版发布。** 当前重点是本地网页版的太阳结构识别、辅助自动标注、人工审核与数据整理，围绕活动区（AR）、冕洞（CH）和日面暗条（FL）完善工作流。当前范围不包含耀斑预测或空间天气预报。
+
+太阳专用模型接入、公开基线复现与效果评估正在推进，尚未交付经过验证的太阳自动识别模型，也不宣称已获得原数据团队的模型权重。后文已有功能介绍、截图和测试数字属于此前开发记录，不代表当前版本已经完成全部验收；本地开发进度也可能尚未同步至默认分支。
+
+## 数据集来源与下载说明
+
+本项目当前开发与验证使用 **Solar Situation Awareness and Flare Forecasting Dataset for Operational Applications**（太阳态势感知与耀斑预报数据集）。
+
+- 数据发布平台：Science Data Bank（科学数据银行）。
+- 数据集 DOI：[10.57760/sciencedb.space.03541](https://doi.org/10.57760/sciencedb.space.03541)。
+- 数据下载：[官方数据文件页面](https://www.scidb.cn/file?fid=951e66409424e2088f2f42562abf0e3a&mode=front)。
+- 配套论文：[*Solar Situation Awareness and Flare Forecasting Dataset for Operational Applications*，Scientific Data](https://doi.org/10.1038/s41597-026-08005-5)。
+
+**本 GitHub 仓库及其源码 ZIP 不包含上述太阳数据集的原始数据。** 请从官方页面自行下载、解压，再在本地配置数据目录；克隆仓库不会同时获得太阳观测图像、原始 NPY 掩膜、NOAA 对应表或耀斑事件表。仓库内已有的 `data/` 演示与测试样本不等于该完整太阳数据集。
+
+原始数据包含 `Situation Awareness Dataset`、`Standardized Solar Observation Image Dataset` 和 `Solar Flare Forecasting Dataset` 等部分。数据集名称包含“耀斑预报”，并不意味着本项目当前提供预测功能；当前开发重点是结构识别、标注与整理。
+
+数据集由原团队发布，本项目为独立开发的应用平台，并非原数据团队的官方软件。使用或再分发数据时须遵守官方数据页面的许可与引用要求；本仓库的 GPL-3.0 软件许可不替代数据集许可。请在使用本平台开展研究时分别引用软件、原始数据集与数据论文。
 
 ---
 
@@ -347,7 +370,7 @@ experiments/         实验固化脚本（路线图项，见第 14 节）
 | 服务端用**标准库 http.server** | 见 C6：零新增依赖是硬要求，部署路径最短 |
 | 前端用 **Vue 3 + TS + Pinia** | 六视图共享状态多（工作区/数据集/版本/选中条目），组合式 API + 显式 store 比临时全局对象更可测 |
 | 渲染参数**服务端出图** | FITS/长时序解析必须在后端；浏览器直出 `<img src="/api/frame?...">` 可复用浏览器缓存，拖时间轴不重复解码 |
-| 深度模型**只做占位** | 权重体积、显存依赖与离线分发成本与"数据不出机器"的定位冲突；保留统一注册机制，用户可自行接入本地 checkpoint |
+| 深度模型接入**开发中** | 已有深度后端仍为占位；后续依据公开论文、代码和可复现基线开展本地模型接入，权重另行获取或训练，不随源码分发 |
 | 版本由 **setuptools_scm** 生成 | 避免代码里手写版本号与 git 标签漂移 |
 
 ---
