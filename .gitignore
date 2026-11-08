@@ -39,3 +39,7 @@ Thumbs.db
 .DS_Store
 *.sqlite-shm
 *.sqlite-wal
+
+# Original datasets are downloaded separately; never commit local copies
+/datas of importance/
+.mdva/
