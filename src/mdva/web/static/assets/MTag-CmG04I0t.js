@@ -1,1 +1,0 @@
-import{d as n,b as o,c,n as r,aK as l,k as d,t as p,h as u,_ as i}from"./index-707K_d8D.js";const m=n({__name:"MTag",props:{kind:{default:"neutral"},text:{default:""}},setup(a){const t=a,e=u(()=>`tag tag--${t.kind}`);return(s,_)=>(o(),c("span",{class:r(e.value)},[l(s.$slots,"default",{},()=>[d(p(a.text),1)])],2))}}),g=i(m,[["__scopeId","data-v-132ab76d"]]);export{g as M};
