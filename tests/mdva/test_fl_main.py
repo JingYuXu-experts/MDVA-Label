@@ -13,6 +13,10 @@ def test_full_pilot_refuses_failed_learning_gate(tmp_path):
 
 def test_full_pilot_uses_source_lr_no_scaler_skips_and_restores_engine(tmp_path,monkeypatch):
     study=tmp_path/'study';study.mkdir()
+    source = tmp_path / "author-source"
+    source.mkdir()
+    (source / "provenance.json").write_text("{}", encoding="utf-8")
+    monkeypatch.setattr(main, "SOURCE", source)
     monkeypatch.setattr(main.engine,'data_identity',lambda _: {})
     p={'code':main.identity(),'data_identity':{},'dataset':str(tmp_path/'dataset'),'source_provenance_sha256':digest(main.SOURCE/'provenance.json'),'config':{}}
     (study/'protocol.json').write_text(json.dumps(p))

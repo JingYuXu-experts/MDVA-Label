@@ -1,10 +1,12 @@
 import pytest
 import torch
-from mdva.training.fl_author_model import AuthorGraph,loss_value
+from mdva.training.fl_author_model import AuthorGraph, SOURCE, loss_value
 from mdva.training.fl_learning_study import select_training
 
 
 def test_author_graph_logit_adapter_is_exact_in_eval_and_controls_share_convs():
+    if not (SOURCE / "provenance.json").is_file():
+        pytest.skip("Requires the pinned DeepFilament author source snapshot")
     torch.set_num_threads(2);torch.manual_seed(2026);batch=AuthorGraph('batch')
     torch.manual_seed(2026);plain=AuthorGraph('none')
     convolution=lambda m:[v.detach() for x in m.modules() if isinstance(x,(torch.nn.Conv2d,torch.nn.ConvTranspose2d)) for v in x.parameters()]
