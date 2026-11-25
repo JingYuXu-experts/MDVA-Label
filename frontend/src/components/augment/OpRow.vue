@@ -1,4 +1,6 @@
 <script setup lang="ts">
+const opNames:Record<string,string>={dedup:'重复检查',blur:'模糊检查',crop:'裁切',rotate:'旋转',mirror:'镜像',photometric:'光度变化',rotate90:'随机旋转',flip:'随机镜像'}
+const paramNames:Record<string,string>={fraction:'保留边长比例',box:'裁切区域（像素）',k:'90°旋转次数',horizontal:'左右镜像',brightness:'亮度扰动幅度',contrast:'对比度扰动幅度',noise:'噪声幅度',p_horizontal:'左右镜像概率',p_vertical:'上下镜像概率',p:'触发概率',k_choices:'可选旋转次数',fraction_jitter:'裁切比例变化',offset:'裁切中心偏移'}
 /**
  * 增强配方的一行算子：勾选 + 参数控件，控件完全由 GET /api/augment/recipes 的 ops.schema 生成，
  * 前端不写死任何算子名或参数名（新增算子零改动上线）。
@@ -81,7 +83,7 @@ function enumOptions(s: OpParamSpec) {
   <div class="oprow" :class="{ 'is-on': state.on }">
     <MCheckbox
       :model-value="state.on"
-      :label="meta.name"
+      :label="opNames[meta.name]||meta.name"
       :aria-label="`启用增强算子 ${meta.name}`"
       @update:model-value="emit('toggle', $event)"
     />
@@ -89,7 +91,7 @@ function enumOptions(s: OpParamSpec) {
 
     <div v-if="state.on" class="oprow__params">
       <div v-for="[key, spec] in entries" :key="key" class="param">
-        <span class="param__name" :title="spec.description || key">{{ key }}</span>
+        <span class="param__name" :title="spec.description || key">{{ paramNames[key]||key }}</span>
 
         <div v-if="isSlider(spec)" class="param__slider">
           <MSlider
@@ -123,7 +125,7 @@ function enumOptions(s: OpParamSpec) {
         <MSwitch
           v-else-if="spec.type === 'boolean'"
           :model-value="Boolean(state.params[key] ?? spec.default)"
-          :label="key"
+          :label="paramNames[key]||key"
           @update:model-value="emit('param', key, $event)"
         />
 

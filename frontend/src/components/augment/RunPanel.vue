@@ -1,9 +1,9 @@
 <script setup lang="ts">
 /**
- * 右 300px 执行与谱系（§5.4）：RunButton（告警检查门控）+ 确认 Dialog 复述告警原文
- * + 谱系逐条展开（B 级：真 before/after 双联 + 逐条抽样参数链）+ 复现校验结果。
+ * 右 300px 执行与生成记录（§5.4）：RunButton（告警检查门控）+ 确认 Dialog 复述告警原文
+ * + 生成记录逐条展开（B 级：真 before/after 双联 + 实际处理参数）+ 复现校验结果。
  *
- * 措辞红线（rev6）：replay 校验的是 seed 谱系链，不是重算像素，
+ * 措辞红线（rev6）：replay 校验的是 seed 生成记录链，不是重算像素，
  * 界面只说"参数链逐条一致/不一致"，不出现"逐字节一致"。
  */
 import { computed, ref } from 'vue'
@@ -43,7 +43,7 @@ function frameFailed(row: AugLineageRow): string {
   return ''
 }
 
-const chainText = computed(() => store.chain.map(c => c.name).join(' → '))
+const chainText = computed(() => store.chain.map(c => ({photometric:'光度变化',crop:'裁切',flip:'镜像',rotate90:'旋转'} as Record<string,string>)[c.name]||c.name).join(' → '))
 const runWhy = computed(() => {
   if (store.running) return '正在执行'
   if (!store.hasRecipe) return '先选配方或勾选算子'
@@ -68,8 +68,9 @@ function bytesOf(n?: number): string {
 }
 async function doRun() {
   confirmRun.value = false
-  const v = await store.run(ctx.version, ctx.role)
-  if (!v) return
+  const dataset=ctx.dataset,version=ctx.version
+  const v = await store.run(version, ctx.role)
+  if (!v||ctx.dataset!==dataset||ctx.version!==version) return
   await ctx.loadVersions()
   ctx.setVersion(v)
 }
@@ -81,7 +82,7 @@ async function doReplay() {
 <template>
   <aside
     class="run"
-    aria-label="增强执行与谱系"
+    aria-label="增强执行与生成记录"
     :data-can-run="String(store.canRun)"
     :data-run-disabled-title="runWhy"
     :data-lineage-rows="String(store.lineage.length)"
@@ -97,7 +98,7 @@ async function doReplay() {
         :title="runWhy || `用 ${chainText} 增强当前版本`"
         @click="confirmRun = true"
       >
-        执行增强
+        生成增强版本
       </MButton>
       <p v-if="!store.checkRan && store.hasRecipe" class="run__hint">
         执行前必须先过告警检查——改一次参数或选一个配方就会自动跑。
@@ -105,7 +106,7 @@ async function doReplay() {
       <p v-if="store.runError" class="run__err" role="alert">{{ store.runError }}</p>
       <template v-if="store.running">
         <MProgress :value="-1" label="增强执行中" />
-        <MButton variant="ghost" size="sm" @click="store.cancelInflight()">取消在途请求</MButton>
+        <MButton variant="ghost" size="sm" @click="store.cancelInflight()">停止等待（任务仍会继续）</MButton>
       </template>
       <p class="run__note">
         原件与父版本一律不动：增强只产新版本，标注按几何链映射过去
@@ -115,13 +116,13 @@ async function doReplay() {
 
     <div class="run__block">
       <h3 class="run__h">
-        谱系
+        生成记录
         <MTag v-if="store.lineageOf" kind="neutral" :text="store.lineageOf" />
       </h3>
-      <MEmpty v-if="store.lineageError" :text="`谱系读不出来：${store.lineageError}`" />
+      <MEmpty v-if="store.lineageError" :text="`生成记录读不出来：${store.lineageError}`" />
       <MEmpty
         v-else-if="!store.lineage.length"
-        :text="isAugmentVersion ? '这个增强版本没有在册谱系（数据库里没有产出记录）' : '当前版本不是增强产出的：执行增强后自动列出'"
+        :text="isAugmentVersion ? '这个增强版本没有在册生成记录（数据库里没有产出记录）' : '当前版本不是增强产出的：生成增强版本后自动列出'"
       />
       <ul v-else class="lin" role="list">
         <li v-for="(row, idx) in store.lineage" :key="`${row.source}-${row.rep}`">
@@ -175,7 +176,7 @@ async function doReplay() {
               这一条的帧没能渲染出来（后端出图失败或文件已不在）：{{ frameFailed(row) }}
             </p>
             <p class="pair__after mono" :title="row.written">{{ row.written }}</p>
-            <h4 class="lin__h4">逐条抽样参数链（服务端按 seed 抽的实际值）</h4>
+            <h4 class="lin__h4">实际处理参数（服务端按 seed 抽的实际值）</h4>
             <ol class="lchain">
               <li v-for="(c, i) in row.chain || []" :key="i" class="lchain__item mono">
                 {{ i + 1 }}. {{ c.op }} {{ JSON.stringify(c.params || {}) }}
@@ -221,17 +222,17 @@ async function doReplay() {
       </p>
     </div>
 
-    <MDialog :open="confirmRun" title="确认执行增强？" @close="confirmRun = false">
+    <MDialog :open="confirmRun" title="确认生成增强版本？" @close="confirmRun = false">
       <p class="dlg__line">
         将产<b>新版本</b>并写出副本文件；<b>原件与父版本一条都不动</b>，标注按几何链映射过去。
       </p>
-      <p class="dlg__line num">算子链：{{ chainText }}</p>
+      <p class="dlg__line num">处理步骤：{{ chainText }}</p>
       <p class="dlg__line num">
-        seed {{ store.seed }} · 每张原件产 {{ store.factor }} 个副本 ·
+        随机编号 {{ store.seed }} · 每张原件产 {{ store.factor }} 个副本 ·
         参与条目 {{ store.limit ? Math.min(store.limit, store.scope.length) : store.scope.length }} 条
       </p>
       <p v-if="store.warnings.length" class="dlg__warn">
-        告警检查有 {{ store.warnings.length }} 条提示（后端原文，执行前请读一遍）：
+        配方检查有 {{ store.warnings.length }} 条提示（生成前请确认）：
       </p>
       <ul v-if="store.warnings.length" class="dlg__list">
         <li v-for="(w, i) in store.warnings" :key="i">{{ w }}</li>

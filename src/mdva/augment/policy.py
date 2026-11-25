@@ -13,6 +13,16 @@ from .lineage import Recipe
 
 #: 学科预设：配方 + 为什么这么配（界面直接显示这句话，用户才知道默认值不是随便来的）
 PRESETS: dict = {
+    "solar_photometric": {
+        "title": "太阳图像 · 轻度光度变化",
+        "recipe": {"seed":0,"factor":1,"ops":[{"name":"photometric","params":{"brightness":0.06,"contrast":0.06,"noise":0.003}}]},
+        "reason": "保留太阳南北方向和几何坐标，只做轻度亮度、对比度与噪声变化。用于训练样本扩充，不作为新的实测观测或定量光度测量。",
+    },
+    "solar_training": {
+        "title": "航空航天图像 · 光度训练副本",
+        "recipe": {"seed":0,"factor":2,"ops":[{"name":"photometric","params":{"brightness":0.12,"contrast":0.12,"noise":0.008}}]},
+        "reason": "每张图产生两份光度扰动副本，保留空间方向和标注位置。需要改变图像方向时，再在高级选项中明确启用几何变换。",
+    },
     "aerospace": {
         "title": "航空航天（星图 / 太阳图 / 遥测）",
         "recipe": {"seed": 0, "factor": 2, "ops": [

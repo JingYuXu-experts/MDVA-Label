@@ -202,7 +202,9 @@ class Solar:
                                     if record['category']=='AR' else 'not_applicable'}
                      for v, n in zip(values, counts) if v != 0]
         return {'available': True, 'uri': record['uri'], 'width': record['width'], 'height': record['height'],
-                'category': record['category'], 'instances': instances, 'read_only': True}
+                'category': record['category'], 'instances': instances, 'read_only': True,
+                'segmentation_kind': 'instance' if record['category']=='AR' else 'semantic',
+                'note': '原始实例编号' if record['category']=='AR' else '原始值表示类别前景；不表示独立对象数量'}
 
     def overlay(self, uri, width=960, height=540, instance=0):
         record = self.store.indexed_item(uri)
@@ -242,5 +244,5 @@ class Solar:
                 if len(points) >= 3:
                     anns.append({'geom': 'poly', 'coords': points[:, ::-1].reshape(-1).tolist(),
                                  'label': record['category'], 'source': 'import',
-                                 'note': f'原始实例 {int(value)} 的轮廓近似；孔洞与原始像素请参照只读掩膜'})
+                                 'note': f"{'原始实例 '+str(int(value)) if record['category']=='AR' else '原始类别区域'}的轮廓近似；孔洞与原始像素请参照只读掩膜"})
         return {'anns': anns, 'approximation': True, 'original_unchanged': True}

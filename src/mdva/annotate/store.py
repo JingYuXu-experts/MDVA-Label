@@ -19,7 +19,7 @@ from typing import Iterable, Optional
 from . import state as ST
 from .model import Ann
 
-SCHEMA_VERSION = 3
+SCHEMA_VERSION = 4
 
 _DDL = """
 CREATE TABLE IF NOT EXISTS dataset(
@@ -71,6 +71,15 @@ CREATE TABLE IF NOT EXISTS sample_index(
 CREATE INDEX IF NOT EXISTS idx_sample_dataset ON sample_index(dataset_id, category);
 CREATE TABLE IF NOT EXISTS import_scan(
   id TEXT PRIMARY KEY, source_id TEXT NOT NULL, created REAL NOT NULL, payload TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS solar_product(
+  uri TEXT PRIMARY KEY, product TEXT NOT NULL, day TEXT NOT NULL, instrument TEXT NOT NULL,
+  category TEXT NOT NULL, stem TEXT NOT NULL, payload TEXT NOT NULL);
+CREATE INDEX IF NOT EXISTS idx_solar_day ON solar_product(day,product);
+CREATE INDEX IF NOT EXISTS idx_solar_stem ON solar_product(stem);
+CREATE TABLE IF NOT EXISTS solar_event(
+  id INTEGER PRIMARY KEY, day TEXT NOT NULL, payload TEXT NOT NULL);
+CREATE INDEX IF NOT EXISTS idx_solar_event_day ON solar_event(day);
+CREATE TABLE IF NOT EXISTS solar_catalog_state(key TEXT PRIMARY KEY, payload TEXT NOT NULL);
 """
 
 def _migrate_v1_noop(store: "Store") -> None:
@@ -104,7 +113,7 @@ def _migrate_v2_relative_uri(store: "Store") -> None:
 
 
 #: 迁移列表：`user_version` 从 n 升到 n+1 就跑 `_MIGRATIONS[n]`。毕设规模不上 alembic。
-_MIGRATIONS: list = [_migrate_v1_noop, _migrate_v2_relative_uri, _migrate_v1_noop]
+_MIGRATIONS: list = [_migrate_v1_noop, _migrate_v2_relative_uri, _migrate_v1_noop, _migrate_v1_noop]
 
 
 def _new_id(prefix: str = "") -> str:

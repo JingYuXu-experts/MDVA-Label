@@ -22,12 +22,13 @@ export function bucketOf(item: ItemRow): Exclude<StateBucket, ''> {
 export const useItemsStore = defineStore('items', () => {
   const items = ref<ItemRow[]>([])
   const page = ref(1)
-  const pageSize = ref(120)
+  const pageSize = ref(60)
   const total = ref(0)
   const categoryFilter = ref('')
   const serverCounts = ref<Record<string, number>>({ '': 0, unlabeled: 0, draft: 0, submitted: 0, approved: 0 })
   const serverModalities = ref<string[]>([])
   let generation = 0
+  let thumbnailContext = 0
   let lastContext = ""
   const loading = ref(false)
   const error = ref('')
@@ -79,7 +80,7 @@ export const useItemsStore = defineStore('items', () => {
 
   /** 可视区批量缩略图：单批 ≤32 uris（UI规格 §8），cell 显式 160,100（§5.1） */
   async function fetchThumbs(uris: string[], signal?: AbortSignal) {
-    const run = generation
+    const run = thumbnailContext
     const pending = uris.filter(u => !thumbs.value.has(u) && !thumbsLoading.value.has(u))
     if (!pending.length) return
     for (const u of pending) thumbsLoading.value.add(u)
@@ -88,7 +89,7 @@ export const useItemsStore = defineStore('items', () => {
       for (let i = 0; i < pending.length; i += 32) {
         const batch = pending.slice(i, i + 32)
         const resp = await api.getThumbs(batch, [160, 100], 0, signal)
-        if (run !== generation) return
+        if (run !== thumbnailContext) return
         for (const row of resp.thumbs) thumbs.value.set(row.uri, row)
         thumbs.value = new Map(thumbs.value)
       }
@@ -97,10 +98,16 @@ export const useItemsStore = defineStore('items', () => {
         // 坏批不阻塞：留空由调用方重试
       }
     } finally {
-      if (run !== generation) return
+      if (run !== thumbnailContext) return
       for (const u of pending) thumbsLoading.value.delete(u)
       thumbsLoading.value = new Set(thumbsLoading.value)
     }
+  }
+
+  async function refreshSavedItems(){
+    const ctx=useCtxStore()
+    lastContext=`${ctx.ws}|${ctx.dataset}|${ctx.version}`
+    await fetchItems()
   }
 
   function toggleSelect(uri: string) {
@@ -122,6 +129,7 @@ export const useItemsStore = defineStore('items', () => {
 
   function reset() {
     generation += 1
+    thumbnailContext += 1
     controller?.abort()
     loading.value = false
     total.value = 0
@@ -139,8 +147,8 @@ export const useItemsStore = defineStore('items', () => {
   }
 
   return {
-    items, loading, error, stateFilter, modalityFilter, search, selected, page, pageSize, total, categoryFilter,
+    items, loading, error, stateFilter, modalityFilter, search, selected, page, pageSize, total, categoryFilter,serverCounts,
     thumbs, thumbsLoading, modalities, filtered, bucketCounts, selectedList,
-    fetchItems, fetchThumbs, toggleSelect, selectAll, clearSelection, reset,
+    fetchItems, refreshSavedItems, fetchThumbs, toggleSelect, selectAll, clearSelection, reset,
   }
 })

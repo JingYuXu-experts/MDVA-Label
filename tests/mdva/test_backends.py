@@ -226,10 +226,11 @@ def test_prompt_validation():
 
 # ---------------------------------------------------------------------- 机器档位
 
-def test_probe_reports_hardware_without_ever_claiming_gpu():
+def test_probe_reports_hardware_without_claiming_model_readiness():
     p = PR.detect()
     assert p.cpu_count >= 1 and p.ram_gb > 0
-    assert p.has_gpu is False and "深度学习" in p.note
+    assert p.has_gpu == bool(p.extras.get('gpu'))
+    assert p.note
     assert p.tier() in ("low", "mid", "high")
     assert p.max_workers(10) <= min(8, p.cpu_count)
     assert p.can_load_points(20000, 6)

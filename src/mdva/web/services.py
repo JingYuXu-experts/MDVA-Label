@@ -683,7 +683,7 @@ class Hub:
                  "ts": r["ts"], "ann": _plain(r["ann"].to_json())} for r in rows]
 
     def put_annotations(self, version_id: str, uri: str, anns: Sequence, role: str = "",
-                        state: str = "draft", replace: bool = True) -> dict:
+                        state: str = "draft", replace: bool = True, preserve_approved: bool = False) -> dict:
         """整条目的标注写入：先删旧的再写新的（`replace=True`），删除会留 review 痕迹。
 
         替换而不是逐条对账，是因为网页端提交的是"这一屏的最终结果"——
@@ -701,8 +701,20 @@ class Hub:
             # 看起来合法——静默归等于把数据损坏伪装成成功。写入点拦截是唯一收口。
             self._check_pixel_bounds(uri, prepared)
             if replace:
-                for row in self.store.list_annotations(version_id, uri):
+                existing=self.store.list_annotations(version_id, uri)
+                if preserve_approved:
+                    fields=('geom','coords','label','source','confidence','level','slice','note','color')
+                    remaining=list(prepared)
+                    for row in existing:
+                        if row['state']!='approved':continue
+                        old=row['ann']
+                        match=next((i for i,a in enumerate(remaining) if all(getattr(a,k)==getattr(old,k) for k in fields)),None)
+                        if match is None:raise PermissionError('已通过的标注被修改或删除；请先驳回该标注，再保存修订。')
+                        remaining.pop(match);ids.append(row['id'])
+                    prepared=remaining
+                for row in existing:
                     if row["state"] in ("approved",):
+                        if preserve_approved:continue
                         raise PermissionError(
                             f"{uri} 有已通过的标注（{row['id']}），不许被整条替换；先驳回再改")
                     self.store.delete_annotation(row["id"], role or "admin", "replace")
@@ -993,6 +1005,40 @@ class Hub:
                          author=author)
         self._invalidate_scans()      # 增强写盘后条目列表要能看到新文件
         return self._rel(_plain({**report, "version_id": report["version"]}))
+
+    def augment_preview(self, uris: Sequence, recipe: dict, uri: str = '') -> dict:
+        """Render one real planned job in memory, using the execution seed and ordering."""
+        from types import SimpleNamespace
+        from .. import augment as AUG
+        from ..render.image import pick_slice, render_array, to_uint8
+        selected=self._abs(uris)
+        if not selected:raise ValueError('先选择需要增强的图片')
+        parsed=AUG.Recipe.from_obj(recipe)
+        if not 1<=int(parsed.factor)<=100:raise ValueError('每张图片副本数应为1—100')
+        # Only retain small planning metadata, not every input image array.
+        items=[]
+        for path in selected:
+            item=self.load_item(path)
+            items.append(SimpleNamespace(uri=str(item.uri),modality=item.modality))
+        jobs=AUG.plan(items,parsed)
+        if not jobs:raise ValueError('当前配方没有可处理的图像')
+        target=self.store.to_abs(uri) if uri else ''
+        job=next((j for j in jobs if j.uri==target and j.rep==0),jobs[0])
+        item=self.load_item(job.uri)
+        if item.modality!='image':raise ValueError('当前预览支持二维图像，请选择图像素材')
+        arr=np.asarray(pick_slice(item,Slice.at_index(int(parsed.index))))
+        out,_,chain=AUG.apply_image(arr,None,job.specs,item.modality)
+        finite=arr[np.isfinite(arr)]
+        lo,hi=(0.,255.) if arr.dtype==np.uint8 else tuple(float(v) for v in np.percentile(finite,[.5,99.5])) if finite.size else (0.,1.)
+        if hi<=lo:hi=lo+1
+        before,_=render_array(arr,size=(640,480),vmin=lo,vmax=hi)
+        # Match save_array(stretch=True), the existing execution PNG encoding.
+        after,_=render_array(to_uint8(out),size=(640,480),vmin=0,vmax=255)
+        return self._rel(_plain({'uri':job.uri,'before':png_b64(before),'after':png_b64(after),
+                                'seed':parsed.seed,'rep':job.rep,'specs':[s.to_json() for s in job.specs],
+                                'chain':[{'op':n,'params':p} for n,p in chain],
+                                'source_shape':list(arr.shape),'output_shape':list(out.shape),
+                                'note':'使用当前范围、随机编号和第一份副本的实际参数链；仅在内存中预览，尚未生成输出版本。'}))
 
     def augment_replay(self, version_id: str) -> dict:
         from .. import augment as AUG

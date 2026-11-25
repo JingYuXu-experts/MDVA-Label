@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { computed, ref, watch, onBeforeUnmount } from 'vue'
 import { storeToRefs } from 'pinia'
-import { useRouter } from 'vue-router'
-import { RefreshCw, Plus, LayoutGrid, List, Images, PackagePlus } from 'lucide-vue-next'
+import { useRoute, useRouter } from 'vue-router'
+import { ArrowLeft, RefreshCw, LayoutGrid, List, Images, PackagePlus } from 'lucide-vue-next'
 import StatCard from '@/components/ui/StatCard.vue'
 import SegmentedControl from '@/components/ui/SegmentedControl.vue'
 import MSelect from '@/components/ui/MSelect.vue'
@@ -17,6 +17,7 @@ import SourceImportDialog from '@/components/console/SourceImportDialog.vue'
 import CreateDatasetDialog from '@/components/console/CreateDatasetDialog.vue'
 import CollectDialog from '@/components/console/CollectDialog.vue'
 import MosaicDialog from '@/components/console/MosaicDialog.vue'
+import DatasetLibrary from '@/components/console/DatasetLibrary.vue'
 import { useCtxStore } from '@/stores/ctx'
 import { useItemsStore, type StateBucket } from '@/stores/items'
 import * as api from '@/api/endpoints'
@@ -25,6 +26,11 @@ import type { StatsResp, ItemRow } from '@/api/types'
 const ctx = useCtxStore()
 const itemsStore = useItemsStore()
 const router = useRouter()
+const route = useRoute()
+const browsing = computed(() => route.query.browse === 'items' && !!ctx.currentDataset)
+const openingDataset = ref('')
+const libraryLoading = ref(false)
+const libraryError = ref('')
 
 const stats = ref<StatsResp | null>(null)
 const createOpen = ref(false)
@@ -75,13 +81,13 @@ const LIST_COLUMNS: TableColumn<ItemRow>[] = [
 ]
 
 watch(pageSize, () => { page.value = 1 })
-watch([page, pageSize], () => { void itemsStore.fetchItems() })
+watch([page, pageSize], () => { if (browsing.value && ctx.version) void itemsStore.fetchItems() })
 let filterTimer: ReturnType<typeof setTimeout> | undefined
 watch(() => [itemsStore.stateFilter, itemsStore.modalityFilter, itemsStore.search, itemsStore.categoryFilter], () => {
   clearTimeout(filterTimer)
-  filterTimer = setTimeout(() => { page.value = 1; void itemsStore.fetchItems() }, 200)
+  if (browsing.value && ctx.version) filterTimer = setTimeout(() => { page.value = 1; void itemsStore.fetchItems() }, 200)
 })
-onBeforeUnmount(() => clearTimeout(filterTimer))
+onBeforeUnmount(() => { clearTimeout(filterTimer); statsGeneration++ })
 
 let statsGeneration = 0
 async function fetchStats() {
@@ -89,22 +95,61 @@ async function fetchStats() {
   if (!ctx.dataset || !ctx.version) { stats.value = null; return }
   try {
     const result = await api.getStats(ctx.dataset, ctx.version)
-    if (run === statsGeneration) stats.value = result
+    if (run === statsGeneration && browsing.value) stats.value = result
   } catch {
-    stats.value = null
+    if (run === statsGeneration) stats.value = null
   }
 }
 
 async function refreshAll() {
+  if (!browsing.value || !ctx.version) return
   await Promise.all([itemsStore.fetchItems(), fetchStats()])
 }
 
-watch(() => [ctx.dataset, ctx.version], () => {
+watch(() => [browsing.value, ctx.dataset, ctx.version], () => {
+  clearTimeout(filterTimer)
+  statsGeneration++
+  stats.value = null
   activeUri.value = ''
   itemsStore.reset()
   page.value = 1
-  void refreshAll()
+  if (browsing.value && ctx.version) void refreshAll()
 }, { immediate: true })
+
+async function refreshLibrary() {
+  libraryLoading.value = true
+  libraryError.value = ''
+  try { await ctx.loadDatasets() }
+  catch (err) { libraryError.value = err instanceof Error ? err.message : String(err) }
+  finally { libraryLoading.value = false }
+}
+
+async function openDataset(id: string) {
+  if (openingDataset.value) return
+  openingDataset.value = id
+  libraryError.value = ''
+  try {
+    await ctx.setDataset(id)
+    if (ctx.dataset !== id) return
+    await router.push({path:'/console', query:{ws:ctx.ws, dataset:id, version:ctx.version, browse:'items'}})
+  } catch (err) { libraryError.value = err instanceof Error ? err.message : String(err) }
+  finally { openingDataset.value = '' }
+}
+
+async function showLibrary() {
+  await router.push({path:'/console', query:{ws:ctx.ws}})
+  await refreshLibrary()
+}
+
+// 浏览器前进/后退或分享的条目链接，应恢复链接中的数据集与版本。
+watch(() => route.fullPath, () => {
+  if (route.query.browse !== 'items') return
+  const id = typeof route.query.dataset === 'string' ? route.query.dataset : ''
+  const version = typeof route.query.version === 'string' ? route.query.version : ''
+  if (!ctx.datasets.some(dataset => dataset.id === id)) return
+  if (id !== ctx.dataset) void ctx.setDataset(id, version).catch(err => { libraryError.value = String(err) })
+  else if (version && ctx.versions.some(item => item.id === version) && version !== ctx.version) ctx.setVersion(version)
+})
 
 // 模态筛选走服务端参数（接口映射 §5.1），变更后重拉
 
@@ -114,7 +159,7 @@ function onPick(uri: string) {
 }
 
 function onAnnotate(uri: string) {
-  void router.push({ path: '/annotate', query: { ...router.currentRoute.value.query, uri } })
+  void router.push({ path: '/annotate', query: { ws:ctx.ws, dataset:ctx.dataset, version:ctx.version, uri } })
 }
 
 function onCollectSingle(uri: string) {
@@ -131,10 +176,8 @@ function onMosaic() {
   mosaicOpen.value = true
 }
 
-async function onCreated(datasetId: string) {
-  await ctx.loadDatasets()
-  await ctx.setDataset(datasetId)
-  await refreshAll()
+async function onCreated() {
+  await showLibrary()
 }
 
 function onRowClick(row: ItemRow) {
@@ -144,6 +187,15 @@ function onRowClick(row: ItemRow) {
 
 <template>
   <div class="console">
+    <DatasetLibrary v-if="!browsing" :datasets="ctx.datasets" :loading="ctx.loading || libraryLoading"
+      :opening="openingDataset" :error="libraryError" @open="openDataset" @refresh="refreshLibrary"
+      @create="createOpen = true" @import="importOpen = true" />
+    <template v-else>
+    <header class="dataset-heading">
+      <MButton variant="ghost" @click="showLibrary"><ArrowLeft :size="16" /> 全部数据集</MButton>
+      <span class="dataset-heading__divider">/</span>
+      <div><h1>{{ ctx.currentDataset?.name }}</h1><p>仅浏览与处理此数据集的当前版本</p></div>
+    </header>
     <!-- 统计条 -->
     <section class="statsbar" aria-label="统计">
       <StatCard label="条目总数" :value="itemsStore.bucketCounts['']"
@@ -160,8 +212,8 @@ function onRowClick(row: ItemRow) {
         aria-label="状态筛选" />
       <MSelect v-model="itemsStore.modalityFilter" :options="modalityOptions" width="110px"
         aria-label="模态筛选" />
-      <MSelect v-model="itemsStore.categoryFilter" :options="[{value:'', label:'全部类别'}, {value:'AR',label:'活动区 AR'}, {value:'CH',label:'冕洞 CH'}, {value:'FL',label:'暗条 FL'}]" width="125px" aria-label="类别筛选" />
-      <MInput v-model="itemsStore.search" placeholder="搜索 uri 子串…" class="toolbar__search" />
+      <MSelect v-if="ctx.currentDataset?.meta?.indexed" v-model="itemsStore.categoryFilter" :options="[{value:'', label:'全部类别'}, {value:'AR',label:'活动区 AR'}, {value:'CH',label:'冕洞 CH'}, {value:'FL',label:'暗条 FL'}]" width="125px" aria-label="类别筛选" />
+      <MInput v-model="itemsStore.search" placeholder="在此数据集中搜索图像…" class="toolbar__search" />
       <MButton variant="ghost" size="sm" title="刷新" :loading="itemsStore.loading"
         @click="refreshAll">
         <RefreshCw :size="14" aria-hidden="true" />
@@ -179,17 +231,13 @@ function onRowClick(row: ItemRow) {
         @click="viewMode = viewMode === 'grid' ? 'list' : 'grid'">
         <component :is="viewMode === 'grid' ? List : LayoutGrid" :size="14" aria-hidden="true" />
       </MButton>
-      <MButton variant="secondary" size="sm" @click="importOpen = true">导入太阳数据</MButton>
-      <MButton variant="primary" size="sm" @click="createOpen = true">
-        <Plus :size="14" aria-hidden="true" /> 新建数据集
-      </MButton>
     </section>
 
     <div class="dataset-context" aria-label="当前数据范围">
       <span>当前：{{ ctx.currentDataset?.name || '未选择数据集' }}
         <template v-if="ctx.currentDataset?.meta?.indexed"> · 索引共 {{ ctx.currentDataset.n_items.toLocaleString() }} 张</template>
         · 当前筛选 {{ itemsStore.total.toLocaleString() }} 张 · 每页 {{ pageSize }} 张</span>
-      <MButton v-if="fullSourceDataset" variant="secondary" size="sm" @click="ctx.setDataset(fullSourceDataset.id)">
+      <MButton v-if="fullSourceDataset" variant="secondary" size="sm" @click="openDataset(fullSourceDataset.id)">
         查看完整数据（{{ fullSourceDataset.n_items.toLocaleString() }} 张）
       </MButton>
     </div>
@@ -206,7 +254,7 @@ function onRowClick(row: ItemRow) {
           <MEmpty v-if="!ctx.dataset" text="还没有数据集：点右上角「新建数据集」，先只读探测目录再建集。"
             action-label="新建数据集" @action="createOpen = true" />
           <MEmpty v-else-if="!itemsStore.items.length"
-            text="该数据集暂无条目，检查 root 目录后点顶栏重扫。" />
+            :text="itemsStore.search || itemsStore.stateFilter || itemsStore.categoryFilter || itemsStore.modalityFilter ? '当前筛选没有匹配条目，请调整筛选条件。' : '此版本暂无条目，可以返回全部数据集查看其他数据集。'" />
           <MEmpty v-else-if="!itemsStore.filtered.length"
             text="当前筛选没有命中条目，放宽状态/模态/搜索条件试试。" />
           <ThumbGrid v-else-if="viewMode === 'grid'" :items="paged" :active-uri="activeUri"
@@ -225,13 +273,14 @@ function onRowClick(row: ItemRow) {
       <span class="paging__info num">第 {{ page }}/{{ pageCount }} 页 · {{ pageRange }}</span>
       <MButton variant="ghost" size="sm" :disabled="page >= pageCount" @click="page += 1">下一页</MButton>
       <MSelect v-model="pageSize" :options="[
-        { value: 60, label: '60/页' }, { value: 120, label: '120/页' }, { value: 240, label: '240/页' },
+        { value: 30, label: '30/页' }, { value: 60, label: '60/页' }, { value: 120, label: '120/页' },
       ]" width="90px" aria-label="每页条数" />
       <span v-if="itemsStore.selected.size" class="paging__sel">
         已选 {{ itemsStore.selected.size }} 条
         <MButton variant="ghost" size="sm" @click="itemsStore.clearSelection()">清空</MButton>
       </span>
     </footer>
+    </template>
 
     <SourceImportDialog :open="importOpen" @close="importOpen = false" @created="onCreated" />
     <CreateDatasetDialog :open="createOpen" @close="createOpen = false" @created="onCreated" />
@@ -243,6 +292,10 @@ function onRowClick(row: ItemRow) {
 
 <style scoped>
 .console { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.dataset-heading { display:flex; align-items:center; gap:14px; padding:18px var(--sp-3) 4px; flex:none; }
+.dataset-heading__divider { color:var(--text-muted); }
+.dataset-heading h1 { margin:0; font-size:16px; line-height:1.5; }
+.dataset-heading p { margin:4px 0 0; color:var(--text-muted); font-size:12px; }
 .dataset-context { display:flex; align-items:center; flex-wrap:wrap; gap:12px; padding:0 var(--sp-3) var(--sp-2); color:var(--text-secondary); font-size:12px; flex:none; }
 .statsbar {
   display: flex; gap: var(--sp-2); padding: var(--sp-3) var(--sp-3) 0;

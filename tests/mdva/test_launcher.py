@@ -66,7 +66,7 @@ def test_invalid_state_and_profile_are_not_setup_completion(launcher):
 
 
 def test_same_service_requires_identity_and_workspace(launcher, monkeypatch):
-    info = {'app': 'mdva', 'revision': 'web-ssafd-1', 'root': str(launcher.ROOT/'data'),
+    info = {'app': 'mdva', 'revision': 'web-solar-ai-4', 'monitor_revision':'sw-2', 'root': str(launcher.ROOT/'data'),
             'out_dir': str(launcher.ROOT/'out')}
     assert launcher.same_service(info)
     assert not launcher.same_service({**info, 'root': str(launcher.ROOT/'other')})

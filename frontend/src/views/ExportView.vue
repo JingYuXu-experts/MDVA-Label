@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import WorkflowSteps from "@/components/layout/WorkflowSteps.vue"
 /**
  * V5 导出 `/export`（UI规格 §5.5 rev7）：单列表单流，四个 Step 纵向排列（非向导弹窗）。
  * ① 格式 ② 划分 ③ 选项 ④ 动作（导出 / 回读校验 / 历史报告）。
@@ -20,6 +21,7 @@ import MDialog from '@/components/ui/MDialog.vue'
 import MButton from '@/components/ui/MButton.vue'
 import { useExportStore } from '@/stores/export'
 import { useCtxStore } from '@/stores/ctx'
+import * as api from '@/api/endpoints'
 
 const store = useExportStore()
 const ctx = useCtxStore()
@@ -31,6 +33,8 @@ const leavePrompt = ref(false)
  */
 let pendingNext: NavigationGuardNext | null = null
 
+const coverage=ref<{total:number;unlabeled:number}|null>(null)
+let coverageSeq=0
 const skipped = computed(() => (store.result?.skipped || []).length)
 
 onMounted(async () => {
@@ -60,9 +64,11 @@ function leaveAnyway() {
   pendingNext = null
 }
 
-watch(() => [ctx.dataset, ctx.version], () => {
+watch(() => [ctx.dataset, ctx.version], async () => {
+  const n=++coverageSeq;coverage.value=null
   store.reset()
   void store.loadReports(ctx.version)
+  if(ctx.dataset&&ctx.version){try{const result=await api.getItems(ctx.dataset,ctx.version,{page:1,page_size:1});if(n===coverageSeq)coverage.value={total:result.total,unlabeled:result.counts.unlabeled||0}}catch{/* Export can still show its own errors. */}}
 }, { immediate: true })
 </script>
 
@@ -75,7 +81,7 @@ watch(() => [ctx.dataset, ctx.version], () => {
     :data-validated="String(store.validated?.ok ?? '')"
     :data-split-sum="String(store.splitSum)"
   >
-    <div class="export__scroll">
+    <WorkflowSteps /><div class="export__scroll"><div v-if="coverage" class="export-coverage"><b>当前版本 {{coverage.total.toLocaleString()}} 张图片，{{coverage.unlabeled.toLocaleString()}} 张尚无人工标注。</b><p>实际导出范围取决于标注来源、审核状态和无标注图片选项，请核对导出报告。尚未标注不代表没有目标，训练前应确认这些图片的用途。</p></div>
       <StepBlock
         no="①"
         title="格式"
@@ -91,7 +97,7 @@ watch(() => [ctx.dataset, ctx.version], () => {
       <StepBlock
         no="②"
         title="划分"
-        note="train/val/test 三段比例；和不为 100% 时前端直接拦下，不发请求。"
+        note="设置训练、验证和测试比例，总和应为100%。同源图片应放在同一划分中。"
         :done="store.splitValid"
         :warn="store.splitError"
         :tone="store.splitError ? 'danger' : 'warning'"
@@ -102,7 +108,7 @@ watch(() => [ctx.dataset, ctx.version], () => {
       <StepBlock
         no="③"
         title="选项"
-        note="训练脚本开关与落盘位置。落盘位置由后端决定并回显，界面只读不猜。"
+        note="选择附加内容。导出完成后会显示保存位置和文件报告。"
         :done="true"
       >
         <OptionsRow />
@@ -111,7 +117,7 @@ watch(() => [ctx.dataset, ctx.version], () => {
       <StepBlock
         no="④"
         title="导出与回读校验"
-        note="导出是同步长请求；成功后建议立即回读校验——产物与版本对不对，只有对账才算数。"
+        note="导出后可验证文件与标注是否完整；被跳过的项目会在报告中说明原因。"
         :done="!!store.result"
         :warn="skipped ? `本次有 ${skipped} 条标注被明确跳过（原因见报告）` : ''"
       >
@@ -138,4 +144,5 @@ watch(() => [ctx.dataset, ctx.version], () => {
 .export__scroll { flex: 1; min-height: 0; overflow-y: auto; }
 .dlg__line { margin: 0; font-size: var(--fs-md); line-height: 1.6; }
 .dlg__line b { color: var(--accent); }
+.export-coverage{padding:16px 24px;border-bottom:1px solid var(--border);font-size:12px;background:var(--bg-panel)}.export-coverage p{font-size:11px;line-height:1.8;color:var(--text-muted);margin-bottom:0}
 </style>

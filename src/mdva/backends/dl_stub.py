@@ -13,7 +13,7 @@ from typing import Sequence
 from ..core.model import DataItem, Slice
 from .base import BACKENDS, Backend, BackendManifest
 
-REASON = "本设计不接入深度学习后端（无 torch、无权重、完全离线）；此处仅为可替换接口占位"
+REASON = "此通用占位不接入深度学习推理；本地AR/CH研究候选请使用标注页的太阳模型候选功能"
 
 _STUBS = {
     "trex2": ("T-Rex2（视觉提示开集检测）", ("detect_similar", "propagate", "content_filter"),

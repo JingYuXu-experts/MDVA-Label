@@ -20,6 +20,8 @@ TRANSITIONS = {
     ("reviewer", "approve"): (("submitted",), "approved"),
     ("reviewer", "reject"): (("submitted", "approved"), "rejected"),
     ("admin", "approve"): (STATES, "approved"),
+    ("admin", "submit"): (("draft", "rejected"), "submitted"),
+    ("admin", "revise"): (("draft", "rejected"), "draft"),
     ("admin", "reject"): (STATES, "rejected"),
     ("admin", "reopen"): (("approved", "rejected"), "draft"),
 }

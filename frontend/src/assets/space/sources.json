@@ -1,0 +1,27 @@
+[
+  {
+    "file": "earth-day.jpg",
+    "url": "https://threejs.org/examples/textures/planets/earth_atmos_2048.jpg",
+    "bytes": 512606
+  },
+  {
+    "file": "earth-night.jpg",
+    "url": "https://www.solarsystemscope.com/textures/download/2k_earth_nightmap.jpg",
+    "bytes": 255287
+  },
+  {
+    "file": "earth-clouds.jpg",
+    "url": "https://www.solarsystemscope.com/textures/download/2k_earth_clouds.jpg",
+    "bytes": 965676
+  },
+  {
+    "file": "earth-specular.jpg",
+    "url": "https://threejs.org/examples/textures/planets/earth_specular_2048.jpg",
+    "bytes": 223421
+  },
+  {
+    "file": "sun.jpg",
+    "url": "https://www.solarsystemscope.com/textures/download/2k_sun.jpg",
+    "bytes": 822427
+  }
+]

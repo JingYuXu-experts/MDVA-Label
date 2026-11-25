@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import WorkflowSteps from "@/components/layout/WorkflowSteps.vue"
 /**
  * V4 增强 `/augment`（UI规格 §5.4 rev6）：左 300 配方面板 / 中央预览（A 级）/ 右 300 执行与谱系。
  *
@@ -57,7 +58,7 @@ async function syncScope() {
     await store.loadLineage('')
     return
   }
-  store.category = String(ctx.currentDataset?.meta?.category || '')
+  store.category = 'aerospace'
   await items.fetchItems()
   /** 谱系只在增强产出的版本上有意义：判据取后端版本 op，前端不猜 */
   await store.loadLineage(isAugmentVersion.value ? ctx.version : '')
@@ -67,7 +68,7 @@ watch(() => [ctx.dataset, ctx.version], () => { void syncScope() })
 </script>
 
 <template>
-  <div class="augment-wrapper"><ScopePicker @change="onScope" />
+  <div class="augment-wrapper"><WorkflowSteps /><ScopePicker :disabled="store.running" @change="onScope" />
   <div
     class="augment"
     :data-scope="store.scope.length"
@@ -90,4 +91,5 @@ watch(() => [ctx.dataset, ctx.version], () => { void syncScope() })
 .augment-wrapper {flex:1;min-height:0;display:flex;flex-direction:column;}
 .augment { flex: 1; min-height: 0; display: flex; align-items: stretch; background: var(--bg-base); }
 .augment__noscope { flex: 1; border-right: 1px solid var(--border); }
+@media(max-width:1150px){.augment{overflow:auto;flex-wrap:wrap}.augment :deep(.run){width:100%;border-left:0;border-top:1px solid var(--border)}.augment :deep(.apreview){min-width:300px}}@media(max-width:650px){.augment{display:block}.augment :deep(.recipe){width:100%}.augment-wrapper{overflow:auto}}
 </style>

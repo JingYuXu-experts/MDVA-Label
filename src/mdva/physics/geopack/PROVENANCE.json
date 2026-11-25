@@ -1,0 +1,14 @@
+{
+  "source": "https://github.com/tsssss/geopack",
+  "version": "PyPI 1.0.13",
+  "original_sha256": {
+    "geopack.py": "cf5f6cf641daabc907f0045a32cf13e1999f50fcc03f09b162eea67fda6dace3",
+    "t89.py": "cc354d3eb9ad2b536734782885010fa8e3890ec9b667e58ff78fee93da9408b2",
+    "t96.py": "365f0ef730c8b489788c5ddc57376fde85bd67fc61896423fac18c747a44510e",
+    "t01.py": "49e024fec34e4b44454854acd5cceb99c9f2447fb4dd28c577e1d4fd8b7727f8",
+    "t04.py": "39c0490bd7c9cb515684cdb549d9a80a8d700eee1eb91da2ba1633e0caac362d"
+  },
+  "changes": "Relative imports; removed import-time HTTP updater. Mathematical routines unchanged.",
+  "igrf14_source": "https://www.ngdc.noaa.gov/IAGA/vmod/coeffs/igrf14coeffs.txt",
+  "igrf14_sha256": "8f8d88403028fc4ee92c4f38d97b46e0a87e2cfc496045b43c9e26c1d6b0903c"
+}

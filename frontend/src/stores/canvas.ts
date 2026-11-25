@@ -28,6 +28,7 @@ export interface DraftAnn {
   coords: number[]
   label: string
   source: string
+  backend?: string
   state: AnnState
   confidence: number
   level: number
@@ -84,6 +85,7 @@ function rowToDraft(row: AnnRow, localId: number): DraftAnn {
     coords: [...(ann.coords || [])],
     label: ann.label || '',
     source: ann.source || 'manual',
+    backend: String(ann.backend || ''),
     state: (row.state as AnnState) || 'draft',
     confidence: Number(ann.confidence ?? 1),
     level: Number(ann.level ?? 0),
@@ -101,6 +103,7 @@ export const useCanvasStore = defineStore('canvas', () => {
   const referenceShown = ref(false)
   const referenceOpacity = ref(0.4)
   const referenceInstance = ref(0)
+  const modelOverlay = ref<{uri:string;src:string;opacity:number}|null>(null)
   let loadGeneration = 0
   const modality = ref('')
   const frameW = ref(960)
@@ -146,6 +149,7 @@ export const useCanvasStore = defineStore('canvas', () => {
   const dirty = ref(false)
   const loading = ref(false)
   const saving = ref(false)
+  const saveError=ref('')
   let nextLocalId = 1
 
   // ---- 撤销栈（本地快照，深度 ≥100）----
@@ -260,6 +264,7 @@ export const useCanvasStore = defineStore('canvas', () => {
       coords: [...partial.coords],
       label: partial.label ?? label.value,
       source: partial.source ?? 'manual',
+      backend: partial.backend ?? '',
       state: (partial.state as AnnState) ?? 'draft',
       confidence: partial.confidence ?? 1,
       level: partial.level ?? 0,
@@ -291,6 +296,7 @@ export const useCanvasStore = defineStore('canvas', () => {
   }
 
   function deleteAnn(localId: number): void {
+    if(draftAnns.value.find(a=>a.localId===localId)?.state==='approved'){useToast().warning('该标注已通过，请先退回修订后再删除。');return}
     draftAnns.value = draftAnns.value.filter((a) => a.localId !== localId)
     if (selId.value === localId) selId.value = null
     pushHist()
@@ -311,6 +317,7 @@ export const useCanvasStore = defineStore('canvas', () => {
     const run = ++loadGeneration
     const version = ctx.version
     loading.value = true
+    saveError.value=''
     try {
       currentUri.value = uri
       const [resp, meta] = await Promise.all([
@@ -352,41 +359,47 @@ export const useCanvasStore = defineStore('canvas', () => {
   }
 
   async function save(): Promise<boolean> {
-    if (!ctx.version || !currentUri.value) return false
+    if (!ctx.version || !currentUri.value || saving.value || loading.value) return false
+    saveError.value=''
     const bad = draftAnns.value.find((a) => annValid(a))
     if (bad) {
+      saveError.value=`标注 #${bad.localId} 无法保存：${annValid(bad)}`
       useToast().danger(`几何非法：#${bad.localId} ${annValid(bad)}`)
       return false
     }
     saving.value = true
     try {
       const payload = draftAnns.value.map((a) => ({
-        geom: a.geom, coords: a.coords, label: a.label, source: a.source,
+        geom: a.geom, coords: a.coords, label: a.label, source: a.source, backend:a.backend || '',
         confidence: a.confidence, level: a.level, slice: a.slice, note: a.note,
         color: a.color,
       }))
       const uri = currentUri.value
+      const dataset=ctx.dataset,workspace=ctx.ws
+      const submitted=JSON.stringify(payload)
       let version = ctx.version
       if (ctx.versions.find(v => v.id === version)?.op === 'import') {
         const working = await api.newVersion(ctx.dataset, version)
         version = working.version_id
       }
-      const resp = await api.putAnnotations(version, uri, payload, ctx.role, 'draft', true)
+      const resp = await api.putAnnotations(version, uri, payload, ctx.role, 'draft', true, true)
       if (version !== ctx.version) { await ctx.loadVersions(); ctx.setVersion(version, true) }
       // 回填后端 id：按提交顺序对应（replace=true 全删重写）
-      const { annotations } = await api.getAnnotations(resp.version_id, currentUri.value)
-      const bySig = new Map<string, AnnRow>()
-      for (const r of annotations) bySig.set(`${r.ann.geom}|${(r.ann.coords || []).join(',')}|${r.ann.label}`, r)
+      const { annotations } = await api.getAnnotations(resp.version_id, uri)
+      if(currentUri.value!==uri||ctx.dataset!==dataset||ctx.ws!==workspace)return false
+      const bySig = new Map<string, AnnRow[]>()
+      for (const r of annotations){const key=`${r.ann.geom}|${(r.ann.coords || []).join(',')}|${r.ann.label}|${r.ann.source}|${r.ann.backend || ''}`;const rows=bySig.get(key)||[];rows.push(r);bySig.set(key,rows)}
       for (const a of draftAnns.value) {
-        const hit = bySig.get(`${a.geom}|${a.coords.join(',')}|${a.label}`)
+        const hit = bySig.get(`${a.geom}|${a.coords.join(',')}|${a.label}|${a.source}|${a.backend || ''}`)?.shift()
         if (hit) { a.id = hit.id; a.state = (hit.state as AnnState) || a.state }
       }
-      hist.value = [snapshot()]
-      hp.value = 0
-      dirty.value = false
-      useToast().success('已保存（整屏覆盖式提交，草稿态）')
+      const current=JSON.stringify(draftAnns.value.map(a=>({geom:a.geom,coords:a.coords,label:a.label,source:a.source,backend:a.backend || '',confidence:a.confidence,level:a.level,slice:a.slice,note:a.note,color:a.color})))
+      dirty.value = current!==submitted
+      if(!dirty.value){hist.value = [snapshot()];hp.value = 0}
+      useToast().success(dirty.value?'已保存提交时的标注；保存期间新增的修改仍待保存。':'标注已保存')
       return true
     } catch (err) {
+      saveError.value=err instanceof Error?err.message:String(err)
       useToast().danger(`保存失败：${err instanceof Error ? err.message : String(err)}`)
       return false
     } finally {
@@ -398,11 +411,12 @@ export const useCanvasStore = defineStore('canvas', () => {
     if (!ctx.version || !currentUri.value) return
     if (dirty.value) {
       const ok = await save()
-      if (!ok) return
+      if (!ok || dirty.value) return
     }
     try {
       const resp = await api.submitItem(ctx.version, currentUri.value, ctx.role)
-      useToast().success(`已提交审核（${resp.n_submitted} 条 draft→submitted）`)
+      if(resp.n_submitted>0)useToast().success(`已提交 ${resp.n_submitted} 个标注，等待审核`)
+      else useToast().info('本图没有待提交的草稿或修订标注。')
       await openItem(currentUri.value)
     } catch (err) {
       useToast().danger(`提交失败：${err instanceof Error ? err.message : String(err)}`)
@@ -411,11 +425,12 @@ export const useCanvasStore = defineStore('canvas', () => {
 
   /** 单条状态迁移（审核区逐条通过/驳回）。 */
   async function reviewOne(a: DraftAnn, action: 'approve' | 'reject', reason = ''): Promise<void> {
+    if(dirty.value){useToast().warning('请先保存当前修改，再进行审核。');return}
     if (!a.id) { useToast().warning('该条尚未保存，无法审核'); return }
     try {
       const resp = await api.setAnnState(a.id, ctx.role, action, reason)
       a.state = resp.state as AnnState
-      pushHist()
+      hist.value=[snapshot()];hp.value=0
     } catch (err) {
       useToast().danger(`审核失败（403 越权？）：${err instanceof Error ? err.message : String(err)}`)
     }
@@ -423,6 +438,7 @@ export const useCanvasStore = defineStore('canvas', () => {
 
   /** 批量验收/驳回：显式传 action（契约 §5.5 ※6）；n=0 视为无生效操作（DEV-03）。 */
   async function reviewBulk(action: 'approve' | 'reject', maxConfidence?: number | null): Promise<void> {
+    if(dirty.value){useToast().warning('请先保存当前修改，再进行审核。');return}
     if (!ctx.version) return
     try {
       const resp = await api.reviewBulk(ctx.version, action, ctx.role, '', maxConfidence ?? null)
@@ -488,6 +504,7 @@ export const useCanvasStore = defineStore('canvas', () => {
   function reset(): void {
     loadGeneration += 1
     currentUri.value = ''
+    modelOverlay.value = null
     modality.value = ''
     fit.value = null
     nativeW.value = null
@@ -505,13 +522,13 @@ export const useCanvasStore = defineStore('canvas', () => {
   }
 
   return {
-    referenceShown, referenceOpacity, referenceInstance, currentUri, modality, frameW, frameH, frameParams, zoom, loadingFrame,
+    referenceShown, referenceOpacity, referenceInstance, modelOverlay, currentUri, modality, frameW, frameH, frameParams, zoom, loadingFrame,
     fit, plotBox, srcW, srcH, contentRect, toCanvasX, toCanvasY, toNativeX, toNativeY,
     nativeW, nativeH, nativeShown, nativeText,
     tRef, tEnd, channels, nViews, isTimeModality, timeSpan,
     labelColors, setLabelColors, colorOf,
     draftAnns, mode, label, selId, dirty, loading, saving, selected,
-    canUndo, canRedo, smartAppliedVersion, smartBusy,
+    canUndo, canRedo, smartAppliedVersion, smartBusy,saveError,
     openItem, save, submitItem, reviewOne, reviewBulk, smartApply, smartUndo,
     addAnn, mutate, endEdit, deleteAnn, select, setMode, undo, redo, pushHist,
     setParam, reset,

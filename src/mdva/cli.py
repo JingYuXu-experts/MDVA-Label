@@ -682,6 +682,9 @@ def cmd_bench(args) -> int:
 
 def cmd_serve(args) -> int:
     """起本地标注平台：只绑回环，浏览器打开即是全部界面。"""
+    import os
+    if getattr(args, 'monitor_online', False):
+        os.environ['MDVA_MONITOR_ONLINE'] = '1'
     from .web.deps import workspace_from_args
     from .web.server import serve
 
@@ -879,6 +882,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument('--source', action='append', default=[], metavar='名称=目录', help='登记只读数据源，可多次指定')
     p.add_argument('--reuse', action='store_true', help='端口已有同一工作区的新版本服务时直接打开网页')
     p.add_argument("--static", default="", help="前端构建产物目录，默认 mdva/web/static")
+    p.add_argument("--monitor-online", action="store_true", help="启用登记的公开空间天气信源自动采集")
     p.add_argument("--open", action="store_true", help="启动后用系统浏览器打开")
     p.add_argument("--verbose", action="store_true", help="打印每一条请求日志")
     p.add_argument("--allow-remote", action="store_true",

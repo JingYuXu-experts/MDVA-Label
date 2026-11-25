@@ -1,0 +1,812 @@
+{
+  "state": "paused",
+  "objective": "可靠稳定的自动识别和活动范围输出。人工范围至少75%覆盖，尽量找全，未标高疑似须物理与其他观测双复核、单独标记，控制乱报漏报。争取区域查准和检出均达80%，结合已识别活动区研究空间天气事件预报。",
+  "updated_utc": "2026-11-19T16:20:20.597037+00:00",
+  "handoff": "docs/SCSS模型性能研究-20轮复核与25轮收敛-20261118.md",
+  "latest_progress": "27张通过SRS双报告与HMI质量核验的宁静窗口中，仅1张有候选，共2处，分别偏正、负极性。前后6小时资料未通过质量或几何核验，暂不判定真伪。171张开发对照中，若硬滤单极候选，参考匹配占比由45.40%升至73.49%，也会丢掉6个原有匹配，检出由61.37%降至60.09%。部署权重与规则保持原样。18项相关测试通过。",
+  "quality_improvement_proven": false,
+  "event_forecast_operational": false,
+  "next_action": "恢复后优先查宁静窗口唯一有候选的2020-05-22观测，用通过质量的相邻时刻和同刻连续谱复核相邻异极性结构。只有足够证据才判断假警或疑似活动。评估按邻接核对能否保留已有匹配。GOES两个实时窗口最早北京时间11月20日13:09与16:53回查。",
+  "training_restarted": false,
+  "localization_report": "out\\model-localization\\20261116-02\\summary.json",
+  "training_scope": "AR proposal/refiner and disk-wide forecast development baselines only",
+  "forecast_supervision_report": "out\\forecast-supervision-20261116\\audit-04\\summary.json",
+  "forecast_supervision_handoff": "docs/预测监督-权威目录与观测覆盖审计-20261116.md",
+  "forecast_coverage_collection": "out\\forecast-supervision-20261116\\collection-02\\status.json",
+  "workflow_demo": "out/deliverables/recognition-walkthrough-20261116/delivery-manifest.json",
+  "recognition_input_probe": "out\\recognition-improvement-20261116\\display-probe-01\\summary.json",
+  "recognition_input_handoff": "docs/CH输入映射诊断与标准化对照-20261116.md",
+  "author_weight_review": "out/recognition-improvement-20261116/author-browser-01/review/final-review.json",
+  "author_weight_handoff": "docs/CNN193作者权重与多通道配对核验-20261116.md",
+  "channel_pairing_audit": "out/recognition-improvement-20261116/channel-pairing-01/summary.json",
+  "scss_shutdown_handoff": "out\\recognition-improvement-20261116\\scss-normalization-01\\shutdown-handoff-20261117.json",
+  "active_training": {
+    "state": "budget_completed",
+    "pid": null,
+    "study": "F:\\毕业设计多图像浏览器\\MulimgViewer-master\\out\\recognition-improvement-20261118\\ar-seed-transfer-01",
+    "checkpoint_epoch": 3,
+    "weights_replaced": false,
+    "gpu_lock_released": true,
+    "scope": "development-only AR teacher transfer and unchanged application model"
+  },
+  "scss_review_command": "python -m mdva.training.scss_review25 --study out/recognition-improvement-20261117/scss-full-01 --output out/recognition-improvement-20261117/scss-review-25-best --checkpoint best",
+  "scss_research_handoff": "docs/SCSS模型性能研究-20轮复核与25轮收敛-20261118.md",
+  "scss_8epoch_review": "F:\\毕业设计多图像浏览器\\MulimgViewer-master\\out\\recognition-improvement-20261117\\scss-review-08\\summary.json",
+  "scss_case_viewer": "F:\\毕业设计多图像浏览器\\MulimgViewer-master\\out\\recognition-improvement-20261117\\scss-review-20-best\\case-viewer\\打开看真实效果.html",
+  "scss_resume_command": "python -m mdva.training.scss_resume --study out/recognition-improvement-20261117/scss-full-01 --stage refinement25",
+  "previous_handoff": "docs/图片直接识别与区域损失对照-交付接续-20261116.md",
+  "scss_20epoch_review": "F:\\毕业设计多图像浏览器\\MulimgViewer-master\\out\\recognition-improvement-20261117\\scss-review-20-best\\summary.json",
+  "scss_20epoch_last_review": "F:\\毕业设计多图像浏览器\\MulimgViewer-master\\out\\recognition-improvement-20261117\\scss-review-20-last\\summary.json",
+  "scss_ensemble_review": "F:\\毕业设计多图像浏览器\\MulimgViewer-master\\out\\recognition-improvement-20261117\\scss-ensemble-20-01\\summary.json",
+  "scss_inference_resources": "F:\\毕业设计多图像浏览器\\MulimgViewer-master\\out\\recognition-improvement-20261117\\scss-speed-20-02\\summary.json",
+  "scss_stage20_snapshot": "F:\\毕业设计多图像浏览器\\MulimgViewer-master\\out\\recognition-improvement-20261117\\scss-full-01\\stage20-snapshot\\snapshot-manifest.json",
+  "official_input_triplet_audit": "out/solar-observation-audit-20261118/input-research-summary.json",
+  "scss_archival_issue": "F:\\毕业设计多图像浏览器\\MulimgViewer-master\\out\\recognition-improvement-20261117\\scss-review-08\\archival-note-20261118.json",
+  "shutdown_handoff": "out/recognition-improvement-20261118/ar-quiet-window-01/shutdown-handoff.json",
+  "physical_hmi_source_audit": "out/solar-observation-audit-20261118/hmi-train16-01/summary.json",
+  "physical_hmi_angular_review": "out/solar-observation-audit-20261118/hmi-angular16-01/summary.json",
+  "scss_25epoch_review": "out/recognition-improvement-20261117/scss-review-25-best/summary.json",
+  "scss_25epoch_last_review": "out/recognition-improvement-20261117/scss-review-25-last/summary.json",
+  "scss_final_decision": "out/recognition-improvement-20261117/scss-full-01/final-development-decision.json",
+  "fl_today_report": "F:\\毕业设计多图像浏览器\\MulimgViewer-master\\out\\recognition-improvement-20261118\\今日研究结果与取舍.json",
+  "fl_real_cases": "F:\\毕业设计多图像浏览器\\MulimgViewer-master\\out\\recognition-improvement-20261118\\fl-learning-review-01\\打开看暗条学习对照.html",
+  "model_architecture_progress": "F:\\毕业设计多图像浏览器\\MulimgViewer-master\\out\\recognition-improvement-20261118\\model-architecture-progress.json",
+  "fl_sampler_followup": "F:\\毕业设计多图像浏览器\\MulimgViewer-master\\out\\recognition-improvement-20261118\\model-performance-followup-01.json",
+  "latest_model_research": "out\\recognition-improvement-20261118\\model-performance-followup-01.json",
+  "continuation_commands": {
+    "scale": "python -m mdva.training.ar_scale_review --study out/recognition-improvement-20261118/ar-scale-pair-02 --joined out/forecast-supervision-20261116/region-join-01 --output <new-output>",
+    "small": "python -m mdva.training.ar_small_region_study review --study out/recognition-improvement-20261118/ar-small-weight-02 --output <new-output>"
+  },
+  "latest_diagnostics": {
+    "ar_hmi_pipeline_full_development": {
+      "report": "out/recognition-improvement-20261118/ar-hmi-pipeline-full-development-01/summary.json",
+      "sha256": "55d0738307d927093b2cf11f854711f9d77fbf7d3c4f682ad04dfabec8c91798"
+    },
+    "ar_srs_full_development": {
+      "report": "out/forecast-supervision-20261116/ar-srs-remaining-01/summary.json",
+      "sha256": "fee8d12c8943087b7170062af5982e4ba983caf3eb742035b253c16d31eae825"
+    },
+    "ar_hmi_candidate_neighbor_audit": {
+      "report": "out/recognition-improvement-20261118/ar-hmi-candidate-neighbors-howard-01/comparison.json",
+      "sha256": "c25e2944bc24da63f2b0163f087d69e67a87b4a446144796540406538b366174"
+    },
+    "ar_hmi_temporal_training_replay": {
+      "report": "out/recognition-improvement-20261118/ar-hmi-temporal-ranker-01/summary.json",
+      "sha256": "fcbf098b31c4aee2dc2ad6bc6a3bc7ea59ba4a4d9b9f24d042e7e7ac84dc78f4"
+    },
+    "ar_fragment_geometry_development": {
+      "report": "out/recognition-improvement-20261118/ar-fragment-repair-full-dev-01/summary.json",
+      "sha256": "60972cadab9f75699017d8fb0cda87d14cb1861f71bc86fd4197d9885fe5b0c6"
+    },
+    "ar_harp_archive_bitmap_probe": {
+      "report": "out/solar-observation-audit-20261118/harp-archive-probe-01/catalog-indexed-bitmaps.json",
+      "sha256": "1d68e10c7760eed6f4e7ecefdb8c8a1a1bfea2d0ce3512d483669ca0f0db9b18"
+    },
+    "ar_sharp_coverage_64": {
+      "report": "out/solar-observation-audit-20261118/sharp-missed-coverage-64-01/reference-coverage-analysis.json",
+      "sha256": "b446f6e2204fdf4b9d4bdac1797a262f7e18c4a9c7c0e5a66afd4c1195421616"
+    },
+    "ar_sharp_patch_registration": {
+      "report": "out/solar-observation-audit-20261118/sharp-coordinate-pilot-02/summary.json",
+      "sha256": "0801279f90d8f345ec68dd1b2a09018f70a2999a48bc71ee82913b51d7295b80"
+    },
+    "ar_sharp_case_figure": {
+      "report": "out/solar-observation-audit-20261118/sharp-missed-coverage-64-01/区域覆盖实际案例.png",
+      "sha256": "c65e141e4b67295b737eda128293123230e6c05115620cc0d82cbe7760d6d1cb"
+    },
+    "flare_sharp_nrt_metadata_probe": {
+      "report": "out/solar-observation-audit-20261118/sharp-nrt-source-probe-01/summary.json",
+      "sha256": "896c8c01b88d24b4b4ce50635ab17b1692f2d14010fae2b80143a9cea98f8aa9"
+    },
+    "flare_historical_sharp_nrt_receipt": {
+      "report": "out/solar-observation-audit-20261118/sharp-nrt-source-probe-01/historical-nrt-samples.json",
+      "sha256": "c793ec026170a943475a34041364a965249106fd57aa202609538ffd2a51b91f"
+    },
+    "ar_sharp_training_sources": {
+      "report": "out/solar-observation-audit-20261118/sharp-train-guide-96-01/summary.json",
+      "sha256": "79a4b6b0cc32a7799b1ceade821ab6cabc27eb2c56facfaa6f40de48b376803d"
+    },
+    "ar_sharp_paired_development": {
+      "report": "out/recognition-improvement-20261118/ar-sharp-auxiliary-01/summary.json",
+      "sha256": "84b9d575998b39f020f8393b05826739010a1e940a6fbe6997ed1a94f364f71e"
+    },
+    "ar_sharp_paired_interval": {
+      "report": "out/recognition-improvement-20261118/ar-sharp-auxiliary-01/paired-analysis.json",
+      "sha256": "b190b835123ffa8b2f6314d7d4ea7474ba5afd58fda79ece8d5551e3de4f9646"
+    },
+    "forecast_sharp_nrt_parity": {
+      "report": "out/forecast-supervision-20261116/sharp-nrt-parity-24-01/summary.json",
+      "sha256": "ef9b1c6405597557cdd6cbc65efe1d5ee9dcc3b19681617bf5a6bd537714018c"
+    },
+    "forecast_sharp_nrt_tail": {
+      "report": "out/forecast-supervision-20261116/sharp-nrt-parity-24-01/timing-and-tail-audit.json",
+      "sha256": "9cc52b9a818ee5d807222e762682863bf2bada1704ecb547f0e811eaa3622659"
+    },
+    "ar_candidate_crop_comparison": {
+      "report": "out/recognition-improvement-20261118/ar-candidate-crop-ranker-01/summary.json",
+      "sha256": "c7758cd5ee0b873ecb1734380f9d8a30f22189e25e595646cc84bd8b2731f02d"
+    },
+    "ar_candidate_crop_paired": {
+      "report": "out/recognition-improvement-20261118/ar-candidate-crop-ranker-01/paired-analysis.json",
+      "sha256": "735c1c6076305ec53d049ab03226c492b9ef1779fc61264b66eaafd5ea290ab9"
+    },
+    "forecast_delayed_targets_120": {
+      "report": "out/forecast-supervision-20261116/sharp-delay-targets-120-01/summary.json",
+      "sha256": "d1694b7e6f516c36280ccf2e9a84f17671be72faca1a2058a5d7cd1f6e8bca1c"
+    },
+    "ar_overlap_factorized_comparison": {
+      "report": "out/recognition-improvement-20261118/ar-crop-overlap-01/summary.json",
+      "sha256": "60d596b93d1b20bcf1d82a4d851013ae8941afd9819ca4e6ae392b19ca2d7739"
+    },
+    "ar_overlap_paired": {
+      "report": "out/recognition-improvement-20261118/ar-crop-overlap-01/paired-analysis.json",
+      "sha256": "391e75badb08e7ca446738c609c377a087b987677f5c5c00761db1a3de053dab"
+    },
+    "forecast_nrt_delayed_availability": {
+      "report": "out/forecast-supervision-20261116/sharp-nrt-delay-join-01/summary.json",
+      "sha256": "d141bc20059d151e7949dcd30271b412c81849692dc1d7bfba4e5f69a80b5343"
+    },
+    "forecast_training_positive_expansion": {
+      "report": "out/forecast-supervision-20261116/sharp-nrt-positive-detection-01/summary.json",
+      "sha256": "b305aea68edf8294fabc4b80a84a71b5287ba6c1876213cd55a5a6fa513dde09"
+    },
+    "forecast_case_enriched_region_comparison": {
+      "report": "out/forecast-supervision-20261116/sharp-nrt-case-enriched-ranking-01/summary.json",
+      "sha256": "a5e6343281824659a5d173f698738448cffb27fd4be03d83e1876ff83f897a92"
+    },
+    "ar_raw_magnetogram_216": {
+      "report": "out/solar-observation-audit-20261118/ar-crop-physical-train216-01/summary.json",
+      "sha256": "9967d6bb26bffc7a06f6ff2f25df7125ff3445bdd16978fa6a7e185d2321b791"
+    },
+    "ar_calibrated_crop_comparison": {
+      "report": "out/recognition-improvement-20261118/ar-physical-crop-01/summary.json",
+      "sha256": "c48724d99808dc0a84f0ce14585bdfce0ceb09420d3c6dc81b51feb595b2df68"
+    },
+    "ar_size_threshold_analysis": {
+      "report": "out/recognition-improvement-20261118/ar-size-aware-policy-02/paired-analysis.json",
+      "sha256": "792741bd19fa472ccdc063ba56b0c83977dd02bc3c36fec61853cabbc36a86c1"
+    },
+    "flare_case_enriched_sensitivity": {
+      "report": "out/forecast-supervision-20261116/sharp-nrt-ranking-sensitivity-01/summary.json",
+      "sha256": "37da64089ba7be85e82c0db2a7486ff78c0e6618888c06720a7528aa1828c126"
+    },
+    "ch_region_complement": {
+      "report": "out/recognition-improvement-20261118/ch-region-complement-01/summary.json",
+      "sha256": "30271610e41f78ec543e386fb330c8c25085d9a228abec6787d0bed7d810fc97"
+    },
+    "ch_missed_region_breakdown": {
+      "report": "out/recognition-improvement-20261118/ch-region-complement-01/missed-region-breakdown.json",
+      "sha256": "18206a820b3e4a31c83c75a7e146a346228fa9ab332f5d181f926dc21033b4c8"
+    },
+    "fl_centerline_diagnosis": {
+      "report": "out/recognition-improvement-20261118/fl-centerline-diagnosis-01/summary.json",
+      "sha256": "c228546c75a6cf30340b76a86ab81e1867e65d4c1020746dd7683133fdb8c247"
+    },
+    "fl_centerline_paired": {
+      "report": "out/recognition-improvement-20261118/fl-centerline-paired-01/summary.json",
+      "sha256": "c513e7efd6cac683a3165ea2cf48ea7f34f6aa9988d4954e907508fe7cb39689"
+    },
+    "fl_centerline_interval": {
+      "report": "out/recognition-improvement-20261118/fl-centerline-paired-01/paired-analysis.json",
+      "sha256": "d3310228b9852ab8ce55d8de76ec574d6cfea0fb40a148a275bd52ea872af7fc"
+    },
+    "fl_equal_probability": {
+      "report": "out/recognition-improvement-20261118/fl-ensemble-01/summary.json",
+      "sha256": "573ccbe90eb1062b5428eab30fc001452d1edc6a3e2f4836b21218192c2e9771"
+    },
+    "fl_station_match": {
+      "report": "out/recognition-improvement-20261118/fl-ensemble-01/station-breakdown.json",
+      "sha256": "36d3857d7c38591df552e9915672467ae4904b42118a6062f59e6b0e392ee114"
+    },
+    "fl_station_normalization": {
+      "report": "out/recognition-improvement-20261118/fl-station-normalization-01/summary.json",
+      "sha256": "36363747633f782c80d4aaf79d971ad46c64f5feb527288ce51689e831975eb6"
+    },
+    "fl_magfilo_annotation_agreement": {
+      "report": "out/solar-model-sources/magfilo-20261119/annotation-audit-02/summary.json",
+      "sha256": "3b579d86f45457d50707441a280775dce6e7b26c49e77412febfd81c371b4e8b"
+    },
+    "fl_gong_train_pool": {
+      "report": "out/solar-model-sources/magfilo-20261119/train-pool-01/summary.json",
+      "sha256": "5b36f4dd4d06b67e73abe58edf38a5ba35cca0bddb9c568fae66a7c68d606429"
+    },
+    "fl_gong_transfer_dev": {
+      "report": "out/solar-model-sources/magfilo-20261119/transfer-dev-01/summary.json",
+      "sha256": "a8c73d93d8016cc07997daeac2147d7d64cc51b625e0eac0c012b4654f37223a"
+    },
+    "fl_gong_adaptation": {
+      "report": "out/recognition-improvement-20261118/fl-magfilo-adaptation-01/summary.json",
+      "sha256": "f9000241e051af3b9204f12c98773aa2a32105540169ea082620c62b4e8721fe"
+    },
+    "fl_gong_adaptation_intervals": {
+      "report": "out/recognition-improvement-20261118/fl-magfilo-adaptation-01/paired-analysis.json",
+      "sha256": "bf5b89da08de30f09d1afe44745b4610512c25b68c6fb03ffdcf158dc5884618"
+    },
+    "fl_gong_limb": {
+      "report": "out/recognition-improvement-20261118/fl-gong-limb-01/summary.json",
+      "sha256": "e83ebd2b76e102901c513238294a16abc08195ca932115242c0194d923599818"
+    },
+    "fl_gong_weight_mix": {
+      "report": "out/recognition-improvement-20261118/fl-magfilo-weight-mix-01/summary.json",
+      "sha256": "134bde193d91723236199b4010f0692d7dfbecc883af49e60c1ae387850b9046"
+    },
+    "fl_gong_local_teacher": {
+      "report": "out/recognition-improvement-20261118/fl-magfilo-local-replay-02/summary.json",
+      "sha256": "517ce5df7a718179961e3b749fac20cc952fe18af64a9f03f3ff7b36292e5595"
+    },
+    "fl_gong_local_teacher_intervals": {
+      "report": "out/recognition-improvement-20261118/fl-magfilo-local-replay-02/paired-review.json",
+      "sha256": "ff3438e56e79d923afdd947f676e8bab39587f836755acd5a67f14e240d1f644"
+    },
+    "fl_gong_local_teacher_failure": {
+      "report": "out/recognition-improvement-20261118/fl-magfilo-local-replay-01/gong_local_replay/status.json",
+      "sha256": "0fde1fda47d6bc4939817dd7fcaf21143c931a98229f997a81a9bfa5431dcb49"
+    },
+    "fl_region_reviewer": {
+      "report": "out/recognition-improvement-20261118/fl-candidate-review-01/summary.json",
+      "sha256": "7476f9117f47cebdc70c24efe878b13445e32a1b927fa9966bf66fc0b61721ba"
+    },
+    "fl_region_reviewer_intervals": {
+      "report": "out/recognition-improvement-20261118/fl-candidate-review-01/paired-review.json",
+      "sha256": "b01797decbdea8e5e29c2335718f76657eef013f265655eb89e682711041314e"
+    },
+    "fl_region_reviewer_external_2021": {
+      "report": "out/recognition-improvement-20261118/fl-gong-verification-2021-01/summary.json",
+      "sha256": "fa37cc3408817e65255b1603fcb3c55920b117afdcc11b93d25d834390e3ad1f"
+    },
+    "fl_region_reviewer_external_2021_analysis": {
+      "report": "out/recognition-improvement-20261118/fl-gong-verification-2021-01/paired-analysis.json",
+      "sha256": "32b4d0e63a79abad3f5d06052c821ee9b45a911480fd85992365796f43b3af3d"
+    },
+    "forecast_recent_xrs": {
+      "report": "out/forecast-supervision-20261116/live-xrs-intake-02/summary.json",
+      "sha256": "23fb3f40d973aac1993e87e28db9b876bf0f7a2c44dcfd39bc0cdd72e2fe6306"
+    },
+    "fl_gong_resolution_audit": {
+      "report": "out/recognition-improvement-20261118/fl-gong-resolution-01/summary.json",
+      "sha256": "14354b7af36edb093f8da5e353fdb17a26c851676d5a2720253fd2d0045be91d"
+    },
+    "fl_gong_patch_training": {
+      "report": "out/recognition-improvement-20261118/fl-gong-patch-training-01/summary.json",
+      "sha256": "683db1abdbff066d9a5c40ba9086f729e2596896668e3e5523e4a0cbfd4c0432"
+    },
+    "fl_gong_patch_training_intervals": {
+      "report": "out/recognition-improvement-20261118/fl-gong-patch-training-01/paired-analysis.json",
+      "sha256": "177efb7ad8cb9fd0f0c4cc19d1dd20b05fa329f8cc3cae29d00ee14c5a501281"
+    },
+    "forecast_hmi_goes_joint_receipt": {
+      "report": "out/forecast-supervision-20261116/joint-live-input-01/summary.json",
+      "sha256": "71254aec42e1c0640cd2883df91370b1047f9caca147b8d896ad4a0a4242a6e6"
+    },
+    "fl_gong_fused_review_development": {
+      "report": "out/recognition-improvement-20261118/fl-gong-fused-review-01/summary.json",
+      "sha256": "577ca6e0b663975a1b7db015c9b97f094c61ab2e965a69f50dc5b1513bde93a7"
+    },
+    "fl_gong_fused_external_2019_2020": {
+      "report": "out/recognition-improvement-20261118/fl-gong-fused-2019-2020-01/summary.json",
+      "sha256": "160dc48ce8e0de338fb5b227e61dab994223a31cbff44111c21a640ddcd04e75"
+    },
+    "fl_gong_fused_external_match_transitions": {
+      "report": "out/recognition-improvement-20261118/fl-gong-fused-2019-2020-01/match-transitions.json",
+      "sha256": "6ebb36fec35223ac8325b97744a9b2d5f33d7d4219dd112a1e7d285bf68bb60b"
+    },
+    "forecast_full_disk_input_availability_delay": {
+      "report": "out/forecast-supervision-20261116/full-disk-availability-delay-01/summary.json",
+      "sha256": "12c355d75bc174fc2212905ca674c99627ffd0b3805db460b85290b792157fff"
+    },
+    "fl_candidate_disagreement": {
+      "report": "out/recognition-improvement-20261118/fl-review-agreement-01/summary.json",
+      "sha256": "c1496feadf9ef38c04efe3439e628fb7f7f65fb10f086df0ed47adf5df1780dc"
+    },
+    "ch_fixed_seed_ensemble": {
+      "report": "out/recognition-improvement-20261118/ch-seed-ensemble-01/summary.json",
+      "sha256": "8f9fa51a56b7c5d21c779b1d36e2e44a2df38a65631fd63e8d29aa9bb080eac5"
+    },
+    "ch_seed_highlighted_misses": {
+      "report": "out/recognition-improvement-20261118/ch-seed-ensemble-01/fully-missed-summary.json",
+      "sha256": "73c6a40c18116997901fff980627457d21b305de3e0a18086e9efc0c8f2a6ae5"
+    },
+    "ch_independent_dark_candidates": {
+      "report": "out/recognition-improvement-20261118/ch-dark-proposals-01/summary.json",
+      "sha256": "6f84f4eae942bb9c8a710b2c1976a04e297b50a9a34dcdfe8ed327d24497646e"
+    },
+    "ch_dark_candidate_real_case": {
+      "report": "out/recognition-improvement-20261118/ch-dark-proposals-01/case-manifest.json",
+      "sha256": "897ab204fe101d32b5d9e05bfd1d78d933f6c460d979d1b2358fe6df2a5991bc"
+    },
+    "ch_multichannel_signal_feasibility": {
+      "report": "out/recognition-improvement-20261118/ch-aux-signal-01/summary.json",
+      "sha256": "b12d0355cf23504c59384298a8f64425d288e03fe1cfd5a9beaf49fc7b9e5c4a"
+    },
+    "ch_multichannel_matched_tiles": {
+      "report": "out/recognition-improvement-20261118/ch-matched-tiles-01/summary.json",
+      "sha256": "2ba33999fb6186c255d94b53beddc9adcf10eb358680b716a4d27b25261e6d45"
+    },
+    "ch_multichannel_candidate_replay": {
+      "report": "out/recognition-improvement-20261118/ch-multichannel-candidate-replay-01/summary.json",
+      "sha256": "27bf06dd280dca3fb1e604a22bc1496da6680fe5c0c0326f10a3937bc2b39b1b"
+    },
+    "ch_multichannel_frozen_tile_selection": {
+      "report": "out/solar-observation-audit-20261118/ch-matched-tiles-01/selection.json",
+      "sha256": "fb03b01c2a25488620eed5b398eff1a4aac827d3be45ff2f20d1bfed5ed7fd34"
+    },
+    "ch_multichannel_dense_generation": {
+      "report": "out/recognition-improvement-20261118/ch-dense-multichannel-01/summary.json",
+      "sha256": "153fb5321b6446399b27d1388bbaba58e8678855706b26b4ecea8555558d3e92"
+    },
+    "ch_multichannel_dense_visual_audit": {
+      "report": "out/recognition-improvement-20261118/ch-dense-multichannel-01/visual-audit.json",
+      "sha256": "fce9ae51a9833d1df8a9e2cc1b17dd5f38c9e23f3258fe7f543f172e768498f0"
+    },
+    "ch_multichannel_dense_fresh_selection": {
+      "report": "out/solar-observation-audit-20261118/ch-dense-fresh16-01/selection.json",
+      "sha256": "c492acb01c1dea108b647f40b1267b46b61c3be79ce62727f657915c71e5b88c"
+    },
+    "forecast_prospective_outcome_command": {
+      "report": "src/mdva/training/forecast_prospective_outcome.py",
+      "sha256": "a6e8f39738076d355acadef9b8808dae625eaf4fc7b415cdaecd8241f3d675a6"
+    },
+    "ch_spatial_multichannel": {
+      "report": "out/recognition-improvement-20261118/ch-spatial-multichannel-01/summary.json",
+      "sha256": "8e1a131bbff40cb57fc5f555bb280eba2283be2e4a9f5752e57358906bfb350f"
+    },
+    "ch_spatial_error_audit": {
+      "report": "out/recognition-improvement-20261118/ch-spatial-error-audit-01/summary.json",
+      "sha256": "af662b17b62ddb21b828d4521afa14d17d4bf9b1182dc2471b9fc3b1dd33891e"
+    },
+    "ch_spatial_expansion_selection": {
+      "report": "out/solar-observation-audit-20261118/ch-spatial-expansion-01/selection.json",
+      "sha256": "aefeb07c76269c84eaf87184cacd3b1c76e9b181d10a5d58a56e2b0b2db20738"
+    },
+    "fl_cross_annotator_miss_audit": {
+      "report": "out/recognition-improvement-20261118/fl-reference-consensus-01/summary.json",
+      "sha256": "673f9bf5783c0be69db2f3971e48f06227846a3ab00d47f617a588fd9bbb9aa2"
+    },
+    "fl_corroborated_size_audit": {
+      "report": "out/recognition-improvement-20261118/fl-reference-consensus-01/agreed-size-audit.json",
+      "sha256": "c5f0ec30b65afc4062407ead43fa7e5cc9d1febf9266ea08e368dae37a4b290b"
+    },
+    "ch_expansion_aia193_211_source": {
+      "report": "out/solar-observation-audit-20261118/ch-spatial-expansion-01/aia/summary.json",
+      "sha256": "0cbfdf4a8410541cf2ffc40fbf44665eb1c77f36c553466c5f98517ecfa753e6"
+    },
+    "fl_original_resolution_contrast": {
+      "report": "out/recognition-improvement-20261118/fl-native-detail-01/summary.json",
+      "sha256": "e5d455fd66a8ee8fc38b8bfd7f501ff2c3881e25fb8cdc1aca3f669e692234a8"
+    },
+    "ch_expansion_aia_triplet_verified": {
+      "report": "out/solar-observation-audit-20261118/ch-spatial-expansion-01/aia171/summary.json",
+      "sha256": "bf42fb66bd7b9bb0e5bf6a570375f54ff2ecab6504b4806c0a88699cdec210cc"
+    },
+    "ch_spatial_expansion_equal_updates": {
+      "report": "out/recognition-improvement-20261118/ch-spatial-expansion-01/summary.json",
+      "sha256": "135482d83baeaae9d85a99f7e263ac7eba8f82525f404531941ccbe7e6dba49f"
+    },
+    "fl_native_contrast_training_2022": {
+      "report": "out/recognition-improvement-20261118/fl-native-local-training-02/summary.json",
+      "sha256": "45b7f4bf850a59af4a9a97eeb54de5c9177dbe69c82491e9076c0c7d8b942a2c"
+    },
+    "fl_native_contrast_score_diagnosis": {
+      "report": "out/recognition-improvement-20261118/fl-native-local-training-02/failure-scores-development.json",
+      "sha256": "21bcc59c5f8133f32567ce50e1b4ca3bea524570e49ec35758a41bcf4fe3ebf6"
+    },
+    "fl_holdout_2022_receipt": {
+      "report": "out/solar-model-sources/magfilo-20261119/holdout-2022-01/inventory.json",
+      "sha256": "95737b94f7f9986761773cd1f92a8bab0d2ea51c38f904de05c2bd19233bc031"
+    },
+    "fl_native_isolated_candidate_replay": {
+      "report": "out/recognition-improvement-20261118/fl-native-proposal-replay-01/summary.json",
+      "sha256": "e90360047a0be71e1bdacb4fb76420ab195f1506a04b101060a235e2b5299761"
+    },
+    "fl_native_positive_loss_weight": {
+      "report": "out/recognition-improvement-20261118/fl-native-positive-weight-01/summary.json",
+      "sha256": "d85c2a2ee579795ecf9371510f46b7846506e745215693def82df6f65a883e9f"
+    },
+    "fl_spine_context_training": {
+      "report": "out/recognition-improvement-20261118/fl-spine-context-01/summary.json",
+      "sha256": "2a24d7012d1ddaa27246ef2da3bddc5b46c053eb074fa7bfd9aeef83c269e174"
+    },
+    "fl_spine_reviewer": {
+      "report": "out/recognition-improvement-20261118/fl-spine-candidate-review-01/summary.json",
+      "sha256": "4585f0803323db6e3b3f7ef28e87262024f74d8fb25c895ea9268c9c8d8831c4"
+    },
+    "forecast_second_joint_receipt": {
+      "report": "out/forecast-supervision-20261116/joint-live-input-02/summary.json",
+      "sha256": "d1ab9e5abcaedde3dc4fc729e0778608a1a5e7f63366dd16aee4c6444c44a8f1"
+    },
+    "fl_gong_hmi_angular_geometry": {
+      "report": "out/solar-observation-audit-20261118/fl-gong-hmi-angular-01/summary.json",
+      "sha256": "eb931bb691f01e542acef5f464595aa32f6e3ae2bfdea7e57f03993928ad4096"
+    },
+    "hmi_nrt_feb_pair": {
+      "report": "out/solar-observation-audit-20261118/hmi-nrt-definitive-parity-01/summary.json",
+      "sha256": "07b7980252f5ccae88d39eaea7ff501c39851585255972f77d7290354b99d2c7"
+    },
+    "hmi_nrt_multi_year_pair": {
+      "report": "out/solar-observation-audit-20261118/hmi-nrt-definitive-parity-02/summary.json",
+      "sha256": "62ed02bb0d8f12deb3e52599da1dfbb7c97d06333ca67021db9a95057db2dd8d"
+    },
+    "fl_gong_hmi_angular_view": {
+      "report": "out/solar-observation-audit-20261118/fl-gong-hmi-angular-01/真实Hα与HMI对照.png",
+      "sha256": "c6f8b46023b324bc1325e345195d5a40bb6127100f25ef74c0c6a9b04e6b9d65"
+    },
+    "ar_hmi_nrt_detector_replay": {
+      "report": "out/forecast-supervision-20261116/ar-nrt-feature-replay-02/summary.json",
+      "sha256": "07028e15b6090cd2280e211a4dbef13f15158f757147da28984f5a4840cf5c39"
+    },
+    "forecast_goes_input_version_replay": {
+      "report": "out/forecast-supervision-20261116/xrs-feature-parity-01/summary.json",
+      "sha256": "56ac2d169d9335ef4b2ca3eb681adec77503a0d152209da8ec7dfb16c680f095"
+    },
+    "fl_historical_halpha_hmi": {
+      "report": "out/solar-observation-audit-20261118/fl-gong-hmi-historical-comparison-01/summary.json",
+      "sha256": "f7d3b1769fc50a2fecb5086a83ff4acded52340ee6de65724f7df83ee034100a"
+    },
+    "fl_historical_halpha_hmi_intake": {
+      "report": "out/solar-observation-audit-20261118/fl-gong-hmi-historical-receipt-01/receipt.json",
+      "sha256": "4e7f05c0240d179b2c28f838df6d8aeca5630340c29308d3359c3a704d43e605"
+    },
+    "fl_magnetic_replay": {
+      "report": "out/recognition-improvement-20261118/fl-gong-magnetic-replay-01/summary.json",
+      "sha256": "44f50cb51d45989ed8a7412506bc429a030634e27c66d03c8b70b1a6a31a84f7"
+    },
+    "fl_magnetic_replay_transitions": {
+      "report": "out/recognition-improvement-20261118/fl-gong-magnetic-replay-01/match-transitions.json",
+      "sha256": "d9907b33cd571b367265dd308d9bf6888f24eb61f04483ce3915e4dee270b76d"
+    },
+    "fl_magnetic_replay_report": {
+      "report": "out/recognition-improvement-20261118/fl-gong-magnetic-replay-01/暗条磁图辅助补检实测.md",
+      "sha256": "9d511ce286f2eaae483fa3ee271edf7ef2112fc754cda088db3f6a246aae50d6"
+    },
+    "fl_magnetic_replay_figure": {
+      "report": "out/recognition-improvement-20261118/fl-gong-magnetic-replay-01/暗条部分补检对照.png",
+      "sha256": "6a515be21bdd617badd2ed964d569a2db37159bf5a5df5eabbc30795b058f2b1"
+    },
+    "fl_halpha_limb_replay": {
+      "report": "out/recognition-improvement-20261118/fl-halpha-limb-replay-01/summary.json",
+      "sha256": "9abd4802c88889ec29196d4f1eef2e000ffeed9f42aa9206333aa58bb6de4e0d"
+    },
+    "fl_halpha_limb_proposal_limits": {
+      "report": "out/recognition-improvement-20261118/fl-halpha-limb-replay-01/proposal-limits.json",
+      "sha256": "a03a2453f5b928d163dd2202ed87b97441e0ffe9fad3993699882f4e1e0dc5cf"
+    },
+    "fl_halpha_limb_report": {
+      "report": "out/recognition-improvement-20261118/fl-halpha-limb-replay-01/日面边缘暗条补检验证.md",
+      "sha256": "26b9164e29a85cf95a0319aa9fd7b13175db1b7a6765b42eebf40d04309006d6"
+    },
+    "fl_fresh_archive_observations": {
+      "report": "out/solar-model-sources/magfilo-20261119/archive-fresh-2021-2022-01/receipt.json",
+      "sha256": "e9dc71e25675d3b7744225b281201739c962d1c8c37ff22daa54fbeb9496bea1"
+    },
+    "fl_contour_weighted": {
+      "report": "out/recognition-improvement-20261118/fl-halpha-contour-01/summary.json",
+      "sha256": "669da669d56ff380042d7fbe5ffe8213ccd2f4eb5a6b82b81c2977e3099bb75b"
+    },
+    "fl_contour_score_collapse": {
+      "report": "out/recognition-improvement-20261118/fl-halpha-contour-01/score-diagnosis.json",
+      "sha256": "bae9f498940cd4b48c3218b20c50b47758542f5a90358c238a47ffb06ef4f73e"
+    },
+    "fl_contour_balanced": {
+      "report": "out/recognition-improvement-20261118/fl-halpha-contour-balanced-01/summary.json",
+      "sha256": "303e4e1d464234858bc159af7e75a7d7cea1fca759a788a63d0b8944d902564f"
+    },
+    "fl_contour_instance_shape": {
+      "report": "out/recognition-improvement-20261118/fl-halpha-contour-balanced-01/shape-diagnosis.json",
+      "sha256": "eb6fe28e9ec49cc96bc5ecf8ffd0e5d8580c32b67c12d504b346face66d8ef01"
+    },
+    "fl_contour_report": {
+      "report": "out/recognition-improvement-20261118/fl-halpha-contour-balanced-01/暗条轮廓补全对照.md",
+      "sha256": "a8a1cb7eb6513d02d8d6520f33b919acce7b170da084351a25fe5f4dce438bd3"
+    },
+    "fl_fresh_gong_geometry_serial": {
+      "report": "out/solar-observation-audit-20261118/fl-archive-fresh-geometry-02/serial-geometry.json",
+      "sha256": "e1b53555b71a9dd4611be8c681a4381fdb50a12882c6e7b8fb319e2baf3816ef"
+    },
+    "fl_contour_constraints": {
+      "report": "out/recognition-improvement-20261118/fl-contour-constraints-01/summary.json",
+      "sha256": "7a03d5ccf04a8b80365e9b58c308e39734b608264a551e71c22a61ae578195e8"
+    },
+    "fl_causal_neighbor_intake": {
+      "report": "out/solar-observation-audit-20261118/fl-gong-causal-neighbors-01/summary.json",
+      "sha256": "4fd575637465a98c251944ab131832a8e242c26da21239203dd053b718caefe3"
+    },
+    "fl_causal_contrast_replay": {
+      "report": "out/recognition-improvement-20261118/fl-temporal-contrast-01/summary.json",
+      "sha256": "8c6fd865f983d0920ce34956b65a61ea89a551331e37a7b4d8e2f1bc97bcd38e"
+    },
+    "fl_constraints_report": {
+      "report": "out/recognition-improvement-20261118/fl-contour-constraints-01/暗条轮廓约束与历史邻帧对照.md",
+      "sha256": "5fa9f7a20ef21141f7fe64528f85e060ba2347a3f35224b975aac6111153ecde"
+    },
+    "fl_visual_candidate_reviewer": {
+      "report": "out/recognition-improvement-20261118/fl-visual-review-01/summary.json",
+      "sha256": "278b5005c0867b79c7c67d9598715397730f042cd22451e5b0e19e349fc2e1fb"
+    },
+    "fl_candidate_oracle_limits": {
+      "report": "out/recognition-improvement-20261118/fl-visual-review-01/exact-policy-and-ceiling.json",
+      "sha256": "29f8d92f3e13521724a196686db39dd6414a811d2853621f3ffa94e3b552115e"
+    },
+    "fl_visual_review_report": {
+      "report": "out/recognition-improvement-20261118/fl-visual-review-01/暗条原图筛选与候选上限.md",
+      "sha256": "bd4752b6931466d9c8f49b6559956564c2b7c31b78517c05866efd9a80390251"
+    },
+    "fl_independent_direct_centers": {
+      "report": "out/recognition-improvement-20261118/fl-direct-centers-01/summary.json",
+      "sha256": "376bded840e2b56ec6044f5fd464620533210639458b7b160a6b49451ee47116"
+    },
+    "fl_direct_novel_corroborated": {
+      "report": "out/recognition-improvement-20261118/fl-direct-centers-01/novel-reference-coverage.json",
+      "sha256": "2cd95c28e7546d714609144a2f367cc053ff9393344d497ba8ab4f8896c3e896"
+    },
+    "fl_direct_fresh_dates": {
+      "report": "out/recognition-improvement-20261118/fl-direct-centers-fresh-01/summary.json",
+      "sha256": "f349deaa699e8e69a4acd0c476b71b68dae4352ac6dcbb8c9d2f900c41e7002f"
+    },
+    "fl_direct_recovered_example": {
+      "report": "out/recognition-improvement-20261118/fl-direct-centers-01/原漏检暗条重获对照.png",
+      "sha256": "d19613486ce2f15584a0403a903b57f6ed80f8dfae30b499d51ca9c3d011088f"
+    },
+    "fl_direct_centers_report": {
+      "report": "out/recognition-improvement-20261118/fl-direct-centers-01/暗条直接定位与新日期实测.md",
+      "sha256": "225ee1792279314c1d479824b4ae65501e7e9fa32f08d2acd6b9c6d2989b32f8"
+    },
+    "fl_direct_candidate_review": {
+      "report": "out/recognition-improvement-20261118/fl-direct-reviewer-01/summary.json",
+      "sha256": "c58883b300a05659c2742aac42f606fc7cfe35fa346da313e905034e57853ee1"
+    },
+    "fl_direct_reviewer_fresh": {
+      "report": "out/recognition-improvement-20261118/fl-direct-reviewer-fresh-01/summary.json",
+      "sha256": "5c5a031938b38f66fbad4322930dd8d1af5e4ff7d1a60dce995e148df434ad23"
+    },
+    "fl_direct_reviewer_paired": {
+      "report": "out/recognition-improvement-20261118/fl-direct-reviewer-01/paired-match-evidence.json",
+      "sha256": "00c9315d0ceb1542a5046213f6619ff6feacb397c2134160cbb378f84b0312f7"
+    },
+    "fl_direct_reviewer_report": {
+      "report": "out/recognition-improvement-20261118/fl-direct-reviewer-01/暗条候选复核及新日期验证.md",
+      "sha256": "8f2591419716bc75e4ffcca09c09174c4ba84104d4fdebd1a3e33c3be4a0a2b7"
+    },
+    "fl_contour_family_comparison": {
+      "report": "out/recognition-improvement-20261118/fl-contour-families-01/summary.json",
+      "sha256": "72ed64a1efbd8aa38fea5c14700b6027ca14361fba8868dffadfb29399036793"
+    },
+    "fl_contour_family_fresh": {
+      "report": "out/recognition-improvement-20261118/fl-contour-families-fresh-01/summary.json",
+      "sha256": "ff782097269e8612ee8414e3517d4fbf07364b637c2143fc974e60e242f7cb58"
+    },
+    "fl_sparse_reference_rejection": {
+      "report": "out/recognition-improvement-20261118/fl-contour-families-fresh-01/sparse-cohort-diagnosis.json",
+      "sha256": "4288dffea5249ca92553f3d9ef1f77c8ce37a4335515f8addac38688815ff869"
+    },
+    "fl_sparse_receipt": {
+      "report": "out/solar-model-sources/magfilo-20261119/archive-fresh-2019-2020-01/image-label-identity.json",
+      "sha256": "c0231338ca67786a0ce1fb5096174c6392e565ba7e1417a19b4c46873e629ae7"
+    },
+    "fl_contour_family_report": {
+      "report": "out/recognition-improvement-20261118/fl-contour-families-01/暗条多轮廓与稀疏日期验证.md",
+      "sha256": "fa3ee3e33163ffe753eafcd1f8895ef4966f12495ce8f43c04cd8f551455e3ef"
+    },
+    "forecast_issue_time_xrs_refresh": {
+      "report": "out/forecast-supervision-20261116/issue-time-xrs-refresh-01/summary.json",
+      "sha256": "05660867973975d8e6c420a6f6d98e2a9bb6c3869d59fe6b9758d9dd828a7d5a"
+    },
+    "forecast_issue_time_report": {
+      "report": "out/forecast-supervision-20261116/issue-time-xrs-refresh-01/耀斑预报签发前通量更新对照.md",
+      "sha256": "cc097b338d9f2ad0668b78f0747648f84d2073ffb3ac209e9507d73bb8d8c61a"
+    },
+    "forecast_live_outcome_readiness": {
+      "report": "out/forecast-supervision-20261116/issue-time-xrs-refresh-01/joint-outcome-readiness.json",
+      "sha256": "3c19b67d1b2202935d824a90554daca3f384be96b3c88b9bee593e812ea81a11"
+    },
+    "fl_sparse_balanced_reviewer": {
+      "report": "out/recognition-improvement-20261118/fl-sparse-reviewer-02/summary.json",
+      "sha256": "19d4faa699c0cf3f937f26c39591e57c7bc7ab40302b3e345c789dcd2bc2de11"
+    },
+    "fl_sparse_failure_attribution": {
+      "report": "out/recognition-improvement-20261118/fl-sparse-reviewer-02/missed-reference-audit.json",
+      "sha256": "88a3676b170bc6b4656903934c3fd4a9d6ffe602c61e16713ccdc1b0d96c5493"
+    },
+    "fl_sparse_root_cause_report": {
+      "report": "out/recognition-improvement-20261118/fl-sparse-reviewer-02/暗条少目标复核与漏检归因.md",
+      "sha256": "c31996bd5ee5f3a3b6d42023bcc4c6a8d17c7a8233a9a8115dc90a8de4ad2939"
+    },
+    "fl_shape_replay": {
+      "report": "out/recognition-improvement-20261118/fl-shape-replay-01/summary.json",
+      "sha256": "ce34028ff7947621e90b32fdae0c695206f2670284c3adcd54c5c74609245933"
+    },
+    "fl_shape_match_transitions": {
+      "report": "out/recognition-improvement-20261118/fl-shape-replay-01/match-transitions.json",
+      "sha256": "97ec64be11d6d6dcf092e87dfaddc4de8683a50cefbb35ae404102274b2eb146"
+    },
+    "fl_shape_report": {
+      "report": "out/recognition-improvement-20261118/fl-shape-replay-01/暗条轮廓收紧与断点连接实测.md",
+      "sha256": "e61b780f3581354b76115fbb2900ed39d34ad5e7224eb69dae7d53e15e99a025"
+    },
+    "fl_paired_trim": {
+      "report": "out/recognition-improvement-20261118/fl-paired-trim-01/summary.json",
+      "sha256": "a8c831c86f5e1e72ecd606f80fd888469041e3d49a6f0b98f076066c152fa86b"
+    },
+    "fl_paired_trim_upper_bound": {
+      "report": "out/recognition-improvement-20261118/fl-paired-trim-01/pair-upper-bound.json",
+      "sha256": "79f0795950fc5664d132ff95f709cdd629a7e89a0f8dd121997203f55d3d2f0b"
+    },
+    "fl_paired_trim_report": {
+      "report": "out/recognition-improvement-20261118/fl-paired-trim-01/原轮廓与收紧轮廓取舍实测.md",
+      "sha256": "31c0f7f1f44bdafec2b68a921e50523b7130772f9c2507167adf7f6102a07994"
+    },
+    "fl_shape_objective": {
+      "report": "out/recognition-improvement-20261118/fl-shape-objective-01/summary.json",
+      "sha256": "ba649fb7e2af411def64420775ede5252033efdfaf656128b8cdf4554993a27c"
+    },
+    "fl_shape_objective_pairs": {
+      "report": "out/recognition-improvement-20261118/fl-shape-objective-01/paired-statistics.json",
+      "sha256": "dc4e27089e1712d43cfc4f67d262929c9e26b22cfb6263b403ae5e203110e690"
+    },
+    "fl_shape_objective_report": {
+      "report": "out/recognition-improvement-20261118/fl-shape-objective-01/暗条边界与连续性训练对照.md",
+      "sha256": "e6263af4c5d84a6219f12f494bf1ba584796e63011594accba6a102365d48683"
+    },
+    "fl_swefil_external_review": {
+      "report": "out/recognition-improvement-20261118/fl-swefil-review-01/summary.json",
+      "sha256": "0635212ee867bdb2df571b32b224f06abe8ca8dbe26bb7d2e3251d91416e583e"
+    },
+    "fl_swefil_external_pairs": {
+      "report": "out/recognition-improvement-20261118/fl-swefil-review-01/paired-statistics.json",
+      "sha256": "a3e88adea33f891ea1faf9aa34bf3cc55610a54532b015eccad51653b03cc043"
+    },
+    "fl_swefil_external_overlap": {
+      "report": "out/recognition-improvement-20261118/fl-swefil-review-01/overlap-diagnostic.json",
+      "sha256": "39dcf7cef21d362ca285122ecf81bc4d22b8e05fee82c47004ec41384052967c"
+    },
+    "fl_swefil_external_report": {
+      "report": "out/recognition-improvement-20261118/fl-swefil-review-01/SWEFil外部暗条复验.md",
+      "sha256": "d200282abe870bcca9256091dc8d07998ac4c0fa6379283b152aaf9ba9bf62c6"
+    },
+    "fl_gong_fresh_archive_waiting": {
+      "report": "out/recognition-improvement-20261118/fl-shape-fresh-01/status.json",
+      "sha256": "15de3abce5c015e7bdc58d70586c0764f4937e78b1903cde8d0d3ae00960f7e1"
+    },
+    "fl_swefil_paired_domain": {
+      "report": "out/recognition-improvement-20261118/fl-swefil-paired-domain-01/summary.json",
+      "sha256": "306ed3a05ad7def78eedf5828551dad46500fa952fa851a2fd6903016e5bc795"
+    },
+    "fl_swefil_display_contrast": {
+      "report": "out/recognition-improvement-20261118/fl-swefil-paired-domain-01/display-contrast-audit.json",
+      "sha256": "3b25c07a6cdff059239a4f313c708c97c7e3c6c6aad10631f5a4d08ce254dee0"
+    },
+    "fl_swefil_paired_report": {
+      "report": "out/recognition-improvement-20261118/fl-swefil-paired-domain-01/SWEFil同观测处理配对.md",
+      "sha256": "483781fda801dfdcd19335e0e4ef28051c8fcce2221230b658f62a27c79eb5c3"
+    },
+    "fl_swefil_paired_demonstration": {
+      "report": "out/recognition-improvement-20261118/fl-swefil-paired-domain-01/same-observation-pair.png",
+      "sha256": "4af63bf5013e11cfffec12d6dcf63161c2dca6beeb3f4c5614680ee457f78e80"
+    },
+    "fl_local_display_ablation": {
+      "report": "out/recognition-improvement-20261118/fl-local-display-01/summary.json",
+      "sha256": "533ef679a1bbe40a4d3507454aaca4bca0ec7ae64094784a264889b2c880d24c"
+    },
+    "fl_local_display_report": {
+      "report": "out/recognition-improvement-20261118/fl-local-display-01/本地暗条输入处理对照.md",
+      "sha256": "b3d98d548b159f9ab0f80804abe4b54b1bc386302ec7d5fc4e87eed891f2725e"
+    },
+    "ar_los_archived_input_receipt": {
+      "report": "out/forecast-supervision-20261116/ar-los-issue-physical-01/input-receipt.json",
+      "sha256": "526c10efcc3a848e8376c20a7d669491347b0f6f7d51da10871981c115479dea"
+    },
+    "ar_los_archived_forecast": {
+      "report": "out/forecast-supervision-20261116/ar-los-issue-physical-01/summary.json",
+      "sha256": "642576581513a998ba51ae140d9e7f7ca65c63479d14e34aa373f200a7dc4e85"
+    },
+    "ar_los_nonempty_mask_sensitivity": {
+      "report": "out/forecast-supervision-20261116/ar-los-issue-physical-01/mask-support-sensitivity.json",
+      "sha256": "6d99df8594ebf81aa8ca6dc24b5351e4879dfca1dd66f05a02e1cca983fb7381"
+    },
+    "ar_los_archived_report": {
+      "report": "out/forecast-supervision-20261116/ar-los-issue-physical-01/活动区物理磁场与耀斑回放.md",
+      "sha256": "d852199ea883c40a0c7ee4c6cdb8003582d103efca2852a819c3eecc26e84f21"
+    },
+    "recognition_approximate_acceptance": {
+      "report": "out/recognition-improvement-20261118/approximate-region-acceptance-01/summary.json",
+      "sha256": "b8ecea2cd2aa552304667d5682c2a9a090ae519706e4ffb371df4f08a61ad11a"
+    },
+    "recognition_approximate_report": {
+      "report": "out/recognition-improvement-20261118/approximate-region-acceptance-01/太阳结构近似区域验收.md",
+      "sha256": "acb6da6d4e93d596e5d63fa96982220cee4b0ff68062f8d27401a404a331793d"
+    },
+    "ar_event_attribution": {
+      "report": "out/forecast-supervision-20261116/ar-los-event-attribution-01/summary.json",
+      "sha256": "1a5f2befb32a8ed00a2834385dcf1fedf45467b8923d820aa4937ca285aef0be"
+    },
+    "ar_event_attribution_report": {
+      "report": "out/forecast-supervision-20261116/ar-los-event-attribution-01/事件与活动区归属核验.md",
+      "sha256": "b0af503a07fe4a3b7ecd583584e9e411b3f8a6a165a34a40a5330192aa7f13da"
+    },
+    "ch_multisource_review": {
+      "report": "out/recognition-improvement-20261118/ch-multisource-review-01/summary.json",
+      "sha256": "621974337d3b0b9d04d235a0c314b6979eab1a86694441a5afedc33848c3031c"
+    },
+    "ch_multisource_report": {
+      "report": "out/recognition-improvement-20261118/ch-multisource-review-01/冕洞多观测疑似区域复核.md",
+      "sha256": "4da6e472be2d9950829c7271f8b3b2258a16112a0630fd707a41575777d5aff4"
+    },
+    "ch_multisource_figure": {
+      "report": "out/recognition-improvement-20261118/ch-multisource-review-01/multi-observation-cases.png",
+      "sha256": "d673e733f487cd519ac6dc4fe778d133ae603745bb4cf4a2eef89edf3c72e6a2"
+    },
+    "ch_neighbor_evidence": {
+      "report": "out/recognition-improvement-20261118/ch-neighbor-evidence-02/summary.json",
+      "sha256": "59fea488fa8eb742fa8be9405023ca4ac2bd1d59659683c8e552224494d9edef"
+    },
+    "ch_neighbor_evidence_report": {
+      "report": "out/recognition-improvement-20261118/ch-neighbor-evidence-02/冕洞相邻观测与漏检审计.md",
+      "sha256": "690433232e4417ba5bcb1a945ecb3d465abb227feadb18b9bc0790fb92dce41e"
+    },
+    "ch_evidence_browser_check": {
+      "report": "out/acceptance/ch-evidence-ui-20261120/browser.json",
+      "sha256": "0e7158769ac4ca84bc73ddb83fd293aef66acf81d6f76eff174db3d81c122bd1"
+    },
+    "ch_evidence_desktop": {
+      "report": "out/acceptance/ch-evidence-ui-20261120/desktop.png",
+      "sha256": "5fe39b1bf2fb74e056f7409a3d4406f72efb615cb0ccd085968d486004456ceb"
+    },
+    "ch_evidence_mobile": {
+      "report": "out/acceptance/ch-evidence-ui-20261120/mobile.png",
+      "sha256": "c694c4291955d45307dfeb3e71194029ed1067d3983e97bd27e54ccd7abdc43b"
+    },
+    "ch_uploaded_review_browser": {
+      "report": "out/acceptance/ch-upload-evidence-20261120/browser.json",
+      "sha256": "a996f2576816ce081d031e31ec51ff31bd17065f67e28abaea0a70d58e9c7e1f"
+    },
+    "ch_uploaded_review_results": {
+      "report": "out/acceptance/ch-upload-evidence-20261120/results-data.json",
+      "sha256": "4cbe309958b49bf27d472c0b18f88597ebeb62b772ca8963beec54ec90001b6c"
+    },
+    "ch_uploaded_review_screenshot": {
+      "report": "out/acceptance/ch-upload-evidence-20261120/result-card.png",
+      "sha256": "7c4485c5a8891570465874bbec3043cc6c8bef8ae56d0817410d0ac6cce508d0"
+    },
+    "ch_uploaded_review_zip": {
+      "report": "out/acceptance/ch-upload-evidence-20261120/verified.zip",
+      "sha256": "cae73c6792e3b2c56fd1f19411b055fe3082487f2320a4d4440b14eee885c14f"
+    },
+    "ar_quiet_window": {
+      "report": "out/recognition-improvement-20261118/ar-quiet-window-01/summary.json",
+      "sha256": "a6cadd096c6bfb0dc158761406b3675cf9f314d6de56a6450f0812fd40f17a5d"
+    },
+    "ar_quiet_window_followup": {
+      "report": "out/recognition-improvement-20261118/ar-quiet-window-01/followup/summary.json",
+      "sha256": "1a64e67b117c21df3cbeeecffc48e6675dd3c02911f2660c1fec4390e12062c1"
+    },
+    "ar_quiet_window_positive_controls": {
+      "report": "out/recognition-improvement-20261118/ar-quiet-window-positive-controls-01/summary.json",
+      "sha256": "9b94ff2a6a10b991c35f4d9c0025e7bf92b93e444efa35108d794461ff51395b"
+    }
+  },
+  "forecast_development_improvement": true,
+  "ar_development_recall_improvement": true,
+  "latest_compute": {
+    "state": "completed",
+    "pid": null,
+    "used_gpu": true,
+    "scope": "Quiet-window AR inference and positive controls only; no new training, formal test or deployment"
+  },
+  "physical_ranker_pilot_passed_on_main_development": true,
+  "external_development_gain": true,
+  "external_candidate_review_verified": true,
+  "prospective_outcome_probe": {
+    "receipt_sha256": "71254aec42e1c0640cd2883df91370b1047f9caca147b8d896ad4a0a4242a6e6",
+    "code_sha256": "a6e8f39738076d355acadef9b8808dae625eaf4fc7b415cdaecd8241f3d675a6",
+    "start_utc": "2026-11-19T05:08:33.902151+00:00",
+    "end_utc": "2026-11-20T05:08:33.902151+00:00",
+    "earliest_probe_utc": "2026-11-20T05:09:00+00:00",
+    "issued_forecast": false,
+    "scientific_confirmation": false,
+    "verification_kind": "provisional operational GOES evidence",
+    "state": "waiting_window_end",
+    "command": "python -m mdva.training.forecast_prospective_outcome --dataset out/pretraining-20261112/dataset-ready --receipt-path out/forecast-supervision-20261116/joint-live-input-01/summary.json --output out/forecast-supervision-20261116/joint-live-outcome-01"
+  },
+  "verification": {
+    "latest_targeted_tests_passed": 40
+  }
+}

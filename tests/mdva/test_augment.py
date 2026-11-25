@@ -452,7 +452,7 @@ def test_read_lineage_comes_from_the_database(store, field):
 
 def test_presets_are_exposed_with_reasons():
     listing = AUG.presets()
-    assert [p["name"] for p in listing] == ["aerospace", "medical", "cv_segmentation", "series"]
+    assert [p["name"] for p in listing] == ["solar_photometric", "solar_training", "aerospace", "medical", "cv_segmentation", "series"]
     assert all(p["reason"] and p["recipe"]["ops"] for p in listing)
     with pytest.raises(KeyError):
         AUG.get("nope")

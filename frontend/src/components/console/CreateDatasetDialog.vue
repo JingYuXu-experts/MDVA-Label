@@ -18,15 +18,12 @@ const TYPE_OPTIONS = [
   { value: 'detection', label: '目标检测' },
   { value: 'classification', label: '图像分类' },
   { value: 'segmentation', label: '图像分割' },
-  { value: 'series_interval', label: '时序区间' },
-  { value: 'event_level', label: '事件等级' },
-  { value: 'mixed', label: '混合数据' },
 ]
 
 const name = ref('')
-const type = ref('detection')
+const type = ref('segmentation')
 const root = ref('')
-const labelsText = ref('')
+const labelsText = ref('AR\nCH\nFL')
 const scanning = ref(false)
 const submitting = ref(false)
 const scanResult = ref<ScanResp | null>(null)
@@ -68,7 +65,7 @@ async function onSubmit() {
     const resp = await api.createDataset(name.value.trim(), root.value.trim(), type.value, '', labels)
     toast.success(`数据集已创建：${name.value.trim()}`)
     emit('created', resp.dataset_id)
-    name.value = ''; root.value = ''; labelsText.value = ''; reset()
+    name.value = ''; root.value = ''; labelsText.value = 'AR\nCH\nFL'; reset()
     emit('close')
   } catch (err) {
     error.value = `建集失败：${err instanceof Error ? err.message : String(err)}`
@@ -82,14 +79,14 @@ async function onSubmit() {
   <MDialog :open="open" title="新建数据集" :width="640" @close="emit('close')">
     <div class="form">
       <div class="form__row">
-        <MInput v-model="name" label="名称" placeholder="如：遥感检测样例" class="grow" />
+        <MInput v-model="name" label="名称" placeholder="如：太阳观测图像" class="grow" />
         <MSelect v-model="type" :options="TYPE_OPTIONS" label="类型" width="160px" />
       </div>
-      <MInput v-model="root" label="数据目录（工作区之内；数据在别处请先用 --data/--out 声明）" mono
+      <MInput v-model="root" label="数据目录（工作区或已登记的数据源）" mono
         placeholder="如：./data/newbatch（工作区之外的路径会被服务端拒绝）" />
       <div class="form__row form__row--tight">
         <MButton variant="secondary" size="sm" :loading="scanning" @click="onScan">
-          只读探测
+          检查目录
         </MButton>
         <span v-if="scanSummary" class="scan-summary">{{ scanSummary }}</span>
       </div>

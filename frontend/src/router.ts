@@ -6,24 +6,32 @@ import { createRouter, createWebHistory } from 'vue-router'
  * 不会重复请求，后续导航直接从模块图里取，不再等静态资源。
  */
 const views = {
+  monitor: () => import('@/views/MonitorView.vue'),
+  solar: () => import('@/views/SolarView.vue'),
+  recognize: () => import('@/views/RecognizeView.vue'),
   console: () => import('@/views/ConsoleView.vue'),
   annotate: () => import('@/views/AnnotateView.vue'),
   clean: () => import('@/views/CleanView.vue'),
   augment: () => import('@/views/AugmentView.vue'),
   export: () => import('@/views/ExportView.vue'),
   backends: () => import('@/views/BackendsView.vue'),
+  training: () => import('@/views/TrainingView.vue'),
 }
 
 const router = createRouter({
   history: createWebHistory(),
   routes: [
-    { path: '/', redirect: '/console' },
+    { path: '/', redirect: '/monitor' },
+    { path: '/monitor', name: 'monitor', component: views.monitor, meta: { title: '空间天气监测台' } },
+    { path: '/solar', name: 'solar', component: views.solar, meta: { title: '太阳科学工作台' } },
+    { path: '/recognize', name: 'recognize', component: views.recognize, meta: { title: '图片自动识别' } },
     { path: '/console', name: 'console', component: views.console, meta: { title: '管理台' } },
     { path: '/annotate', name: 'annotate', component: views.annotate, meta: { title: '标注' } },
     { path: '/clean', name: 'clean', component: views.clean, meta: { title: '清洗' } },
     { path: '/augment', name: 'augment', component: views.augment, meta: { title: '增强' } },
     { path: '/export', name: 'export', component: views.export, meta: { title: '导出' } },
     { path: '/backends', name: 'backends', component: views.backends, meta: { title: '后端' } },
+    { path: '/training', name: 'training', component: views.training, meta: { title: '本地模型实验' } },
     { path: '/:pathMatch(.*)*', redirect: '/console' },
   ],
 })

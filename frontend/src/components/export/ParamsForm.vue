@@ -13,7 +13,7 @@ import { useExportStore } from '@/stores/export'
 
 const props = defineProps<{ skip?: string[] }>()
 const store = useExportStore()
-const PARAM_CN: Record<string,string> = {annotation_source:'标注来源',task:'任务类型',polygons_as_boxes:'多边形派生检测框',include_masks:'附带编号掩膜',include_background:'保留背景样本',states:'审核状态',only_labels:'类别筛选',min_confidence:'最低置信度',images_dir:'图像子目录',segmentation:'附带分割轮廓',max_rows:'最大行数'}
+const PARAM_CN: Record<string,string> = {annotation_source:'标注来源',task:'任务类型',polygons_as_boxes:'多边形派生检测框',include_masks:'附带编号掩膜',include_background:'附带无标注图片',states:'审核状态',only_labels:'类别筛选',min_confidence:'最低置信度',images_dir:'图像子目录',segmentation:'附带分割轮廓',max_rows:'最大行数'}
 
 const entries = () => Object.entries(store.schema || {})
   .filter(([k]) => !(props.skip || []).includes(k)) as [string, OpParamSpec][]

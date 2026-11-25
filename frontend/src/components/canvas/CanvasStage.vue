@@ -28,12 +28,17 @@ function buildFrameUrl(): string {
   return frameUrl(store.currentUri, p)
 }
 function scheduleFrame(): void {
-  if (!store.currentUri) { displaySrc.value = ''; return }
-  store.loadingFrame = true
   if (throttleTimer) clearTimeout(throttleTimer)
+  throttleTimer=null
+  if (!store.currentUri) { displaySrc.value = '';store.loadingFrame=false;return }
+  store.loadingFrame = true
   throttleTimer = setTimeout(() => {
     throttleTimer = null
-    displaySrc.value = buildFrameUrl()
+    const url=buildFrameUrl()
+    // Reopening a saved/submitted image can yield the same URL. Vue will not
+    // reload it, so no second load event will clear the interaction guard.
+    if(url===displaySrc.value&&imgEl.value?.complete&&imgEl.value.naturalWidth>0){store.loadingFrame=false;return}
+    displaySrc.value = url
   }, 120)
 }
 watch(() => [store.currentUri, store.frameParams, store.frameW, store.frameH], scheduleFrame, { deep: true })
@@ -172,7 +177,7 @@ const isHot = (id: number, handle: number): boolean =>
 const hotHalf = computed(() => 5 / store.zoom)
 
 function onDown(evt: MouseEvent): void {
-  if (!store.currentUri) return
+  if (!store.currentUri || store.loading || store.loadingFrame||!imgEl.value?.naturalWidth) return
   // BUG-011：Blink 在 mousedown 后越过拖拽阈值会对 SVG 内容起原生拖拽，dragstart 之后
   // 页面再也收不到 mousemove/mouseup（顶点只跟第一段、is-drag 卡住）。mousedown 一律
   // preventDefault 让拖拽会话根本起不来，手势期的 move/up 再绑到 window 保证必达。
@@ -455,6 +460,10 @@ onBeforeUnmount(() => { if (throttleTimer) clearTimeout(throttleTimer); unbindGe
         :src="api.referenceOverlayUrl(store.currentUri, store.frameW, store.frameH, store.referenceInstance)"
         :style="{ opacity: store.referenceOpacity }" :width="store.frameW" :height="store.frameH"
         alt="原始实例掩膜参考" draggable="false" />
+      <img v-if="store.modelOverlay && store.modelOverlay.uri===store.currentUri" class="stage__mask"
+        :data-candidate-uri="store.modelOverlay.uri"
+        :src="store.modelOverlay.src" alt="模型栅格候选，待人工核对" draggable="false"
+        :style="{opacity:store.modelOverlay.opacity,position:'absolute',left:(store.fit?.x0 || 0)+'px',top:(store.fit?.y0 || 0)+'px',width:(store.fit?.w || store.frameW)+'px',height:(store.fit?.h || store.frameH)+'px'}" />
       <svg
         ref="svgEl"
         class="stage__svg"

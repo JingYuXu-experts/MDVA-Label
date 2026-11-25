@@ -103,11 +103,18 @@ def health():
 
 
 def same_service(info):
-    return bool(info and info.get('app') == 'mdva' and info.get('revision') == 'web-ssafd-1'
+    return bool(info and info.get('app') == 'mdva' and info.get('revision') == 'web-solar-ai-4' and info.get('monitor_revision') == 'sw-2'
                 and Path(info.get('root', '')).resolve() == (ROOT / 'data').resolve()
                 and Path(info.get('out_dir', '')).resolve() == (ROOT / 'out').resolve()
-                and (not (ROOT / 'datas of importance' / 'Situation Awareness Dataset').is_dir()
-                     or 'ssafd' in info.get('sources', [])))
+                and set(default_sources()) <= set(info.get('sources', [])))
+
+
+def default_sources():
+    names = {'ssafd': 'Situation Awareness Dataset',
+             'solar_obs': 'Standardized Solar Observation Image Dataset',
+             'solar_forecast': 'Solar Flare Forecasting Dataset'}
+    return {name: ROOT / 'datas of importance' / folder for name, folder in names.items()
+            if (ROOT / 'datas of importance' / folder).is_dir()}
 
 
 def start_service(executable):
@@ -121,12 +128,11 @@ def start_service(executable):
     log.parent.mkdir(exist_ok=True)
     args = [str(executable), '-u', str(ROOT / 'main.py'), 'serve', '--data', str(ROOT / 'data'),
             '--out', str(ROOT / 'out'), '--reuse']
-    source = ROOT / 'datas of importance' / 'Situation Awareness Dataset'
-    if source.is_dir():
-        args.extend(['--source', 'ssafd=' + str(source)])
+    for name, source in default_sources().items():
+        args.extend(['--source', name + '=' + str(source)])
     with log.open('ab') as stream:
         child = subprocess.Popen(args, cwd=ROOT, stdin=subprocess.DEVNULL, stdout=stream,
-                                 stderr=stream, creationflags=HIDDEN, start_new_session=os.name != 'nt')
+                                 stderr=stream, env={**os.environ, 'MDVA_MONITOR_ONLINE': '1'}, creationflags=HIDDEN, start_new_session=os.name != 'nt')
     deadline = time.monotonic() + 40
     while time.monotonic() < deadline:
         if same_service(health()):

@@ -1,0 +1,26 @@
+<script setup lang="ts">
+import { computed } from 'vue'
+import { guideContent, guideSteps, type GuideStep, type ModelStatus } from './guide'
+import type { MagneticModel } from './products'
+import type { WindSample } from './physics'
+import type { SolarEvent, PropagationModel } from './impact'
+const props=defineProps<{step:GuideStep;now:number;wind:WindSample;magnetic?:MagneticModel;modelStatus:ModelStatus;event:SolarEvent|null;events:SolarEvent[];simulations:PropagationModel[]}>()
+const emit=defineEmits<{step:[value:GuideStep];select:[value:string];retry:[];movie:[]}>()
+const content=computed(()=>guideContent(props.step,props))
+const eventName=(e:SolarEvent)=>new Date(e.startTime).toLocaleString('zh-CN',{timeZone:'Asia/Shanghai',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hour12:false})+' 喷发'+(e.sourceLocation?' · '+e.sourceLocation:'')
+</script>
+<template>
+  <section class="scene-guide" aria-label="四步看懂日地空间" :data-guide-step="step">
+    <nav class="guide-steps" aria-label="讲解步骤"><button v-for="(name,i) in guideSteps" :key="name" :aria-current="step===i?'step':undefined" :class="{active:step===i}" @click="emit('step',i as GuideStep)"><span>{{i+1}}</span>{{name}}</button></nav>
+    <div class="guide-title"><b>{{content.title}}</b><small>{{content.kind}}</small></div>
+    <p class="guide-description">{{content.description}}</p><p class="guide-look"><strong>看哪里：</strong>{{content.look}}</p>
+    <label v-if="step===3" class="guide-event">选择喷发（北京时间）<select :value="event?.activityID||''" aria-label="讲解中的喷发事件" @change="emit('select',($event.target as HTMLSelectElement).value)"><option value="">先选一次喷发</option><option v-for="item in events" :key="item.activityID" :value="item.activityID">{{eventName(item)}}</option></select></label>
+    <p class="guide-state" role="status">{{content.state}} <button v-if="step===2&&modelStatus.state==='error'" class="guide-retry" @click="emit('retry')">重试全局磁场</button></p><div class="guide-footer"><span>{{content.limit}} <button v-if="step===2" class="guide-retry" @click="emit('movie')">查看官方磁层变化回放</button></span><div><button v-if="step>0" @click="emit('step',(step-1) as GuideStep)">上一步</button><button class="next-step" @click="emit('step',((step+1)%4) as GuideStep)">{{content.next}}</button></div></div>
+  </section>
+</template>
+<style scoped>
+.scene-guide{position:absolute;z-index:5;left:16px;right:16px;bottom:14px;padding:13px 16px;background:#0c1d2bf2;border:1px solid #42677d;border-radius:9px;box-shadow:0 8px 25px #0008;color:#d9e9f2;font:13px/1.65 'Microsoft YaHei',sans-serif;max-height:43%;overflow:auto}.guide-steps{display:flex;gap:5px;margin-bottom:10px}.guide-steps button{flex:1;display:flex;align-items:center;justify-content:center;gap:7px;border:1px solid #2e4c60;background:#112b3b;color:#9db9cb;border-radius:5px;padding:5px;cursor:pointer;font:12px 'Microsoft YaHei',sans-serif}.guide-steps button.active{border-color:#68bec7;background:#1b4656;color:#e5fbff}.guide-steps span{display:grid;place-items:center;width:19px;height:19px;border-radius:50%;background:#244b60;font:11px Consolas,monospace}.guide-title{display:flex;align-items:center;justify-content:space-between;gap:8px}.guide-title b{font-size:16px;font-weight:600;color:#f0f8fc}.guide-title small{flex:none;color:#8eb8cb;font-size:10px}.scene-guide p{font-size:12px;line-height:1.7;margin:5px 0;color:#b7cedd}.scene-guide .guide-look{color:#c8e3ee}.scene-guide .guide-state{background:#102e3e;border-left:3px solid #6ab8bd;padding:6px 9px;color:#aee0e3;overflow-wrap:anywhere}.guide-footer{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:7px}.guide-footer>span{font-size:10px;line-height:1.6;color:#bdac89;max-width:65%}.guide-footer>div{display:flex;gap:7px;flex:none}.guide-footer button{background:#17384b;border:1px solid #4e798e;color:#c4dbe8;border-radius:4px;padding:6px 9px;font:11px 'Microsoft YaHei',sans-serif;cursor:pointer}.guide-footer .next-step{background:#24505d;color:#e5fbff;border-color:#78bac4}.guide-event{display:flex;align-items:center;gap:10px;color:#b8d6e7;font-size:11px;margin:8px 0}.guide-event select{background:#102b3b;border:1px solid #4b7188;color:#dceef8;min-width:0;flex:1;padding:6px;font:11px 'Microsoft YaHei',sans-serif}
+@media(min-width:1200px){:global(.solar-studio.expanded) .scene-guide{max-width:900px;left:28px;bottom:24px;padding:17px 20px}:global(.solar-studio.expanded) .scene-guide p{font-size:14px}:global(.solar-studio.expanded) .guide-title b{font-size:19px}}
+@media(max-width:600px){.scene-guide{left:8px;right:8px;bottom:8px;padding:10px;max-height:48%;font-size:12px}.guide-steps{gap:3px}.guide-steps button{font-size:10px;gap:4px;flex-wrap:wrap}.guide-steps span{height:17px;width:17px;font-size:10px}.guide-title{flex-wrap:wrap;gap:3px}.guide-title b{font-size:14px}.scene-guide p{font-size:11px}.guide-footer{flex-wrap:wrap;gap:7px}.guide-footer>span{max-width:100%}.guide-footer>div{margin-left:auto}.guide-event{display:block}.guide-event select{display:block;width:100%;margin-top:4px}}
+.scene-guide .guide-retry{background:transparent;border:0;color:#89cfdf;padding:2px 4px;text-decoration:underline;cursor:pointer;font:11px 'Microsoft YaHei',sans-serif}
+</style>

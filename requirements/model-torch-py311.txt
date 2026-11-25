@@ -1,0 +1,5 @@
+# Install with the Python from the mdva311 Conda environment only.
+--index-url https://download.pytorch.org/whl/cu128
+-c model-compatibility-py311.txt
+torch==2.10.0+cu128
+torchvision==0.25.0+cu128

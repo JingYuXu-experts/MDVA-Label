@@ -19,7 +19,7 @@ const cls = computed(() => [
 
 <template>
   <button :class="cls" :type="type" :disabled="disabled || loading" :title="title"
-    :aria-busy="loading || undefined" :aria-label="title">
+    :aria-busy="loading || undefined">
     <Loader2 v-if="loading" class="btn__spinner" :size="14" aria-hidden="true" />
     <span class="btn__content"><slot /></span>
   </button>

@@ -14,6 +14,7 @@ import * as api from '@/api/endpoints'
 import type { CleanApplyResp, CleanOpMeta, CleanPreviewResp, DroppedRow, TaskRow } from '@/api/types'
 import { useTasksStore } from './tasks'
 import { useToast } from './toast'
+import { useCtxStore } from './ctx'
 
 const PREVIEW_DEBOUNCE = 500
 
@@ -25,6 +26,10 @@ export interface OpState {
 export const useCleanStore = defineStore('clean', () => {
   const tasks = useTasksStore()
   const toast = useToast()
+  const ctx=useCtxStore()
+  const autoPreview=ref(false),previewKey=ref('')
+  const requestKey=computed(()=>JSON.stringify([ctx.ws,ctx.dataset,ctx.version,scope.value,specs.value,calibration.value,writeTransformed.value]))
+  const previewFresh=computed(()=>!!preview.value&&!previewing.value&&previewKey.value===requestKey.value)
 
   const ops = ref<CleanOpMeta[]>([])
   const opsLoading = ref(false)
@@ -96,6 +101,7 @@ export const useCleanStore = defineStore('clean', () => {
   }
 
   async function loadOps() {
+    const fresh=!state.value.dedup
     opsLoading.value = true
     opsError.value = ''
     try {
@@ -103,6 +109,7 @@ export const useCleanStore = defineStore('clean', () => {
       const list = (resp as { ops?: CleanOpMeta[] }).ops || []
       ops.value = list
       initFromOps()
+      if(fresh&&state.value.dedup){state.value.dedup.params.distance=0;state.value.dedup.params.content_corr=.9999}
     } catch (err) {
       opsError.value = err instanceof Error ? err.message : String(err)
     } finally {
@@ -132,6 +139,8 @@ export const useCleanStore = defineStore('clean', () => {
   /** 500ms 尾沿防抖：连续拖动滑块只在停手后发一次，且一定是最后一次的值 */
   function schedulePreview() {
     if (debounceTimer) clearTimeout(debounceTimer)
+    previewSeq++;previewController?.abort();previewing.value=false;previewKey.value='';preview.value=null;previewError.value=''
+    if(!autoPreview.value)return
     debounceTimer = setTimeout(() => {
       debounceTimer = null
       void runPreview()
@@ -140,9 +149,11 @@ export const useCleanStore = defineStore('clean', () => {
 
   function cancelScheduled() {
     if (debounceTimer) { clearTimeout(debounceTimer); debounceTimer = null }
+    previewSeq++;previewController?.abort();previewing.value=false
   }
 
   async function runPreview() {
+    const key=requestKey.value
     if (!hasSelection.value || !scope.value.length) {
       preview.value = null
       previewError.value = ''
@@ -159,6 +170,7 @@ export const useCleanStore = defineStore('clean', () => {
         previewController.signal)
       if (seq !== previewSeq) return    // 乱序返回：旧预览晚到，丢弃，不覆盖新数字
       preview.value = resp
+      previewKey.value=key
       previewedAt.value = Date.now()
     } catch (err) {
       if (seq !== previewSeq) return
@@ -197,7 +209,7 @@ export const useCleanStore = defineStore('clean', () => {
 
   /** 执行：同步长请求（§3.2-5），version 显式传（§2.8），按钮 loading + 可取消 + 禁重复提交 */
   async function apply(version: string, author: string): Promise<string> {
-    if (!hasSelection.value || applying.value || !version) return ''
+    if (!hasSelection.value || applying.value || !version || !previewFresh.value || !scope.value.length) return ''
     applying.value = true
     applyError.value = ''
     const handle = tasks.begin('clean', `清洗执行（${selectedOps.value.map(o => o.name).join(' → ')}）`)
@@ -269,7 +281,7 @@ export const useCleanStore = defineStore('clean', () => {
 
   return {
     ops, opsLoading, opsError, state, calibration, writeTransformed, scope, datasetId,
-    preview, previewing, previewError, previewedAt,
+    preview, previewing, previewError, previewedAt,previewFresh,autoPreview,
     applying, applyError, lastApply, rollingBack, rollbackError, lastRollback,
     history, historyLoading, dropped, droppedOf,
     selectedOps, specs, hasSelection, stat, hitList,

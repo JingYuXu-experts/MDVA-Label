@@ -1,8 +1,9 @@
-"""离线纪律：这个平台不发起任何出站请求，数据不出机器。
+"""本地处理离线纪律：数据处理不出站；公开信源采集器按当前用户授权单独联网。
 
 两层保证，都要有：
 1. 静态扫源码——任何"能连出去"的写法（requests/urllib.request/http.client/create_connection）
-   出现在引擎里就是违规。`webbrowser` 是唯一例外：它只打开本机 127.0.0.1 的页面。
+   数据处理模块不得使用这些接口。公开观测下载和研究采集按文件及接口列出例外。
+   `webbrowser` 只打开本机 127.0.0.1 的页面。
 2. 动态拦截——把 socket 的连接与地址解析函数换成会抛错的桩，然后跑一遍完整流程
    （建数据集 → 出图 → 标注 → 预标注 → 清洗 → 增强 → 导出）。真连了外网就是这里炸。
 
@@ -29,6 +30,18 @@ FORBIDDEN = ("requests", "httpx", "urllib3", "aiohttp", "ftplib", "smtplib",
              "urllib.request", "urllib.error", "http.client", "socketio", "websockets")
 ALLOWED_MODULES = {"socket", "webbrowser"}      # 只做本地用，逐条在下面核对
 
+# Public-source readers and the research scripts that handle their HTTP errors.
+PUBLIC_SOURCE_IMPORTS = {
+    "web/space_weather.py": {"urllib.error", "urllib.request"},
+    "web/historical_hmi.py": {"urllib.request"},
+    "training/aia_pair_audit.py": {"urllib.error"},
+    "training/ar_sharp_assist_audit.py": {"urllib.request"},
+    "training/fl_magfilo_transfer.py": {"urllib.error", "urllib.request"},
+    "training/forecast_coverage_plan.py": {"urllib.error"},
+    "training/forecast_srs_availability.py": {"urllib.request"},
+    "training/hmi_nrt_intake.py": {"urllib.request"},
+}
+
 
 def _imports(path: Path) -> set:
     """文件里所有 import 的顶层与二级模块名（走 AST，不受注释与字符串干扰）。"""
@@ -48,9 +61,11 @@ def _imports(path: Path) -> set:
 def test_no_engine_module_imports_an_http_client():
     offenders = {}
     for path in SRC_ROOT.rglob("*.py"):
-        hit = _imports(path) & set(FORBIDDEN)
+        relative_path = path.relative_to(SRC_ROOT).as_posix()
+        allowed = PUBLIC_SOURCE_IMPORTS.get(relative_path, set())
+        hit = (_imports(path) & set(FORBIDDEN)) - allowed
         if hit:
-            offenders[str(path.relative_to(SRC_ROOT))] = sorted(hit)
+            offenders[relative_path] = sorted(hit)
     assert offenders == {}
 
 

@@ -21,6 +21,8 @@ out/bench/*
 !out/bench/backends.json
 
 # 本地数据库
+# 原始太阳数据集仅在本地另行下载，不随源码分发
+/datas of importance/
 *.sqlite
 *.sqlite3
 *.db
@@ -40,3 +42,15 @@ Thumbs.db
 .DS_Store
 *.sqlite-shm
 *.sqlite-wal
+
+# 本地导入、观测下载与临时排查产物
+/data/imports/
+/data/solar_ar/
+/data/solar_ar_ssafd_trial/
+/data/_ssafd_masks_src/
+/experiments/probes/
+/_pm*.py
+/_pm*.out
+/_pm*.log
+/_pm*.txt
+/交接资料-20261107/

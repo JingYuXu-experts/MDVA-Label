@@ -14,6 +14,7 @@ import os
 import platform
 import re
 import shutil
+import subprocess
 from dataclasses import dataclass, field
 
 
@@ -25,7 +26,7 @@ class Probe:
     python: str = ""
     machine: str = ""
     free_disk_gb: float = 0.0
-    note: str = "本平台不接入深度学习后端，显卡不参与计算"
+    note: str = "显卡能力与模型运行环境分别检查"
     extras: dict = field(default_factory=dict)
 
     def tier(self) -> str:
@@ -49,7 +50,7 @@ class Probe:
         return {"cpu_count": self.cpu_count, "ram_gb": round(self.ram_gb, 2),
                 "has_gpu": self.has_gpu, "python": self.python, "machine": self.machine,
                 "free_disk_gb": round(self.free_disk_gb, 2), "tier": self.tier(),
-                "note": self.note}
+                "note": self.note, "gpu": self.extras.get('gpu', [])}
 
 
 def _ram_bytes() -> float:
@@ -95,10 +96,23 @@ def detect(path: str = ".") -> Probe:
         free = shutil.disk_usage(path).free / (1024 ** 3)
     except OSError:
         free = 0.0
+    gpu = []
+    executable = shutil.which('nvidia-smi')
+    if executable:
+        try:
+            command = subprocess.run([executable, '--query-gpu=name,memory.total,memory.free', '--format=csv,noheader,nounits'],
+                                     capture_output=True, timeout=3,
+                                     creationflags=subprocess.CREATE_NO_WINDOW if os.name=='nt' else 0)
+            for line in command.stdout.decode('utf-8', errors='replace').splitlines():
+                name, total, available = [v.strip() for v in line.split(',')]
+                gpu.append({'name': name, 'total_mib': int(total), 'free_mib': int(available)})
+        except (OSError, ValueError, subprocess.TimeoutExpired):
+            pass
     return Probe(
         cpu_count=os.cpu_count() or 1,
         ram_gb=_ram_bytes() / (1024 ** 3),
-        has_gpu=False,
+        has_gpu=bool(gpu), extras={'gpu': gpu},
+        note='已检测 NVIDIA 显卡；模型是否可运行以模型环境自检为准' if gpu else '未检测到可查询的 NVIDIA 显卡；可使用 CPU 后端',
         python=platform.python_version(),
         machine=f"{platform.system()}/{platform.machine()}",
         free_disk_gb=free,

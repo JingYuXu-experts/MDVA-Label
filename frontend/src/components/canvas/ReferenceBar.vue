@@ -12,16 +12,18 @@ const available = ref(false)
 const instances = ref<{id:number; pixels:number; noaa:string|null}[]>([])
 const error = ref('')
 const busy = ref(false)
+const semantic = ref(false)
 let generation = 0
-const options = computed(() => [{value:0,label:'全部实例'}, ...instances.value.map(i => ({value:i.id,label:`实例 ${i.id}${i.noaa ? ' · NOAA '+i.noaa : ''} · ${i.pixels} 像素`}))])
+const options = computed(() => [{value:0,label:semantic.value ? '全部目标区域' : '全部实例'}, ...instances.value.map(i => ({value:i.id,label:`${semantic.value ? '类别区域' : '实例 '+i.id}${i.noaa ? ' · NOAA '+i.noaa : ''} · ${i.pixels} 像素`}))])
 watch(() => store.currentUri, async (uri) => {
   const run = ++generation
   available.value = false; error.value = ''; store.referenceShown = false; store.referenceInstance = 0
   if (!uri) return
   try {
-    const resp = await get<{available:boolean;instances:typeof instances.value}>('/reference', {uri})
+    const resp = await get<{available:boolean;instances:typeof instances.value;segmentation_kind:string}>('/reference', {uri})
     if (run !== generation) return
     available.value = resp.available; instances.value = resp.instances; store.referenceShown = resp.available
+    semantic.value = resp.segmentation_kind === 'semantic'
   } catch (err) { if (run === generation) error.value = String(err) }
 }, {immediate:true})
 async function copyContours() {
@@ -43,7 +45,7 @@ async function copyContours() {
     <label>透明度 <input v-model.number="store.referenceOpacity" type="range" min="0" max="1" step="0.05" aria-label="掩膜透明度" /></label>
     <MSelect v-model="store.referenceInstance" :options="options" width="230px" aria-label="原始实例" />
     <MButton size="sm" variant="secondary" :disabled="busy" @click="copyContours">复制轮廓到人工草稿</MButton>
-    <span>取消勾选可对照原图</span>
+    <span>{{ semantic ? '类别区域不等于独立对象数量' : '取消勾选可对照原图' }}</span>
   </div>
   <p v-if="error" role="alert" class="error">原始掩膜读取失败：{{ error }}</p>
 </template>

@@ -72,9 +72,9 @@ export const mosaicSrc = (uris: string[], cell: [number, number] = [320, 200],
 export const getAnnotations = (version: string, uri = '', signal?: AbortSignal) =>
   get<{ annotations: AnnRow[]; n: number }>('/annotations', { version, uri }, { signal })
 export const putAnnotations = (version: string, uri: string, anns: unknown[],
-  role: string, state = 'draft', replace = true) =>
+  role: string, state = 'draft', replace = true, preserve_approved = false) =>
   post<{ version_id: string; uri: string; ids: string[]; removed: number; n: number }>(
-    '/annotations', { version, uri, anns, role, state, replace })
+    '/annotations', { version, uri, anns, role, state, replace, preserve_approved })
 export const setAnnState = (annotation_id: string, role: string, action: string, reason = '') =>
   post<{ annotation_id: string; state: string; role: string; action: string }>(
     '/annotations/state', { annotation_id, role, action, reason })

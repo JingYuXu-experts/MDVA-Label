@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { onMounted, onBeforeUnmount, ref } from 'vue'
+import { onMounted, onBeforeUnmount, ref, computed } from 'vue'
+import { useRoute } from 'vue-router'
 import TopBar from '@/components/layout/TopBar.vue'
 import TaskDrawer from '@/components/layout/TaskDrawer.vue'
 import ToastHost from '@/components/ui/ToastHost.vue'
@@ -8,6 +9,9 @@ import { useCtxStore } from '@/stores/ctx'
 import { TOKEN_INVALID_EVENT } from '@/api/client'
 
 const ctx = useCtxStore()
+const route = useRoute()
+const monitoring = computed(() => route.name === 'monitor')
+const independent = computed(() => monitoring.value || route.name === 'training' || route.name === 'recognize')
 const tokenInvalid = ref(false)
 const bootError = ref('')
 
@@ -45,9 +49,9 @@ onBeforeUnmount(() => {
     </div>
   </div>
   <div v-else class="app">
-    <TopBar />
+    <TopBar v-if="!monitoring" />
     <main class="app__main">
-      <div v-if="bootError" class="boot-error">
+      <div v-if="bootError && !independent" class="boot-error">
         <p>初始化失败：{{ bootError }}</p>
         <MButton variant="primary" @click="boot">重试</MButton>
       </div>

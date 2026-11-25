@@ -6,7 +6,7 @@
 
 三条硬约束：
 - 只绑 127.0.0.1（`--allow-remote` 才放开，且必须显式给）；数据不出机器。
-- 不发起任何出站请求：本模块只 import 标准库 + 本项目。
+- 公开信源采集仅由 space_weather 模块在显式联网配置下执行。
 - 静态文件只在 `static/` 目录内解析，路径穿越一律拒绝。
 """
 
@@ -295,6 +295,9 @@ def serve(workspaces, host: str = "127.0.0.1", port: int = 8765, static_dir=None
             return 0
         print(f"起不来：{exc}（端口 {port} 大概被占了，加 --port 换一个）")
         return 1
+    if __import__('os').environ.get('MDVA_MONITOR_ONLINE') == '1':
+        from .space_weather import instance
+        instance(httpd.mdva_workspaces)
     shown = f"http://{host}:{httpd.server_address[1]}"
     print(f"mdva 标注平台 -> {shown}/  （API 索引 {shown}/api）")
     print(f"工作区根目录 {httpd.mdva_workspaces.root}；Ctrl+C 退出")
@@ -324,7 +327,8 @@ def _reuse_service(workspaces, port):
                     break
                 chunks.extend(block)
         info = json.loads(bytes(chunks).split(b'\r\n\r\n', 1)[1])
-        return (info.get('app') == 'mdva' and info.get('revision') == 'web-ssafd-1'
+        return (info.get('app') == 'mdva' and info.get('revision') == 'web-solar-ai-4'
+                and info.get('monitor_revision') == 'sw-2'
                 and Path(info.get('root', '')).resolve() == workspaces.root
                 and Path(info.get('out_dir', '')).resolve() == workspaces.hub().out_dir.resolve()
                 and set(workspaces.sources) <= set(info.get('sources', [])))

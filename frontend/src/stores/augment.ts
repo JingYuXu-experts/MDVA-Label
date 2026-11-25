@@ -151,10 +151,11 @@ export const useAugmentStore = defineStore('augment', () => {
     metaError.value = ''
     try {
       const resp = await api.getAugmentRecipes()
-      ops.value = resp.ops || []
-      presets.value = resp.presets || []
+      ops.value = (resp.ops || []).filter(o=>!o.name.startsWith('series_'))
+      presets.value = (resp.presets || []).filter(p=>p.name.startsWith('solar_'))
       taskPresets.value = resp.task_presets || {}
       initFromOps()
+      if(!presets.value.some(p=>p.name===sourceName.value)&&presets.value[0])applyPreset(presets.value[0])
     } catch (err) {
       metaError.value = err instanceof Error ? err.message : String(err)
     } finally {
@@ -243,6 +244,7 @@ export const useAugmentStore = defineStore('augment', () => {
   /** 500ms 尾沿防抖：连续改参数只在停手后跑一次 check，且一定是最后一次的值 */
   function scheduleCheck() {
     if (debounceTimer) clearTimeout(debounceTimer)
+    checkSeq++;checkController?.abort();checkRan.value=false;checking.value=false
     debounceTimer = setTimeout(() => {
       debounceTimer = null
       void runCheck()

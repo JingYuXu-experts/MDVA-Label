@@ -33,6 +33,8 @@ export const useCtxStore = defineStore('ctx', () => {
   let healthTimer: ReturnType<typeof setInterval> | null = null
   let router: Router | null = null
   let contextGuard: () => boolean = () => true
+  let datasetsGeneration = 0
+  let versionsGeneration = 0
   function setContextGuard(guard: (() => boolean) | null) { contextGuard = guard || (() => true) }
 
   function setRouter(r: Router) {
@@ -82,7 +84,10 @@ export const useCtxStore = defineStore('ctx', () => {
   }
 
   async function loadDatasets() {
+    const run = ++datasetsGeneration
+    const workspace = ws.value
     const resp = await api.getDatasets()
+    if (run !== datasetsGeneration || workspace !== ws.value) return
     datasets.value = resp.datasets
     // 首次进入优先完整的只读源索引，避免最新验收样本遮住完整数据。
     // URL 中明确指定的有效数据集仍然保留。
@@ -95,12 +100,18 @@ export const useCtxStore = defineStore('ctx', () => {
   }
 
   async function loadVersions() {
+    const run = ++versionsGeneration
+    const datasetId = dataset.value
+    const workspace = ws.value
+    const requestedVersion = version.value
+    versions.value = []
+    version.value = ''
     if (!dataset.value) { versions.value = []; version.value = ''; return }
-    const resp = await api.getVersions(dataset.value)
+    const resp = await api.getVersions(datasetId)
+    if (run !== versionsGeneration || datasetId !== dataset.value || workspace !== ws.value) return
     versions.value = resp.versions
-    if (!versions.value.some(v => v.id === version.value)) {
-      version.value = resp.head || resp.versions[resp.versions.length - 1]?.id || ''
-    }
+    version.value = versions.value.some(v => v.id === requestedVersion)
+      ? requestedVersion : resp.head || resp.versions[resp.versions.length - 1]?.id || ''
   }
 
   /** 全量刷新：健康 → 工作区 → 数据集 → 版本（启动与 rescan 后用） */
@@ -128,15 +139,18 @@ export const useCtxStore = defineStore('ctx', () => {
     dataset.value = ''
     version.value = ''
     await loadDatasets()
+    if (name !== ws.value) return
     await loadVersions()
+    if (name !== ws.value) return
     writeQuery()
   }
 
-  async function setDataset(id: string) {
+  async function setDataset(id: string, requestedVersion = '') {
     if (id !== dataset.value && !contextGuard()) return
     dataset.value = id
-    version.value = ''
+    version.value = requestedVersion
     await loadVersions()
+    if (id !== dataset.value) return
     writeQuery()
   }
 

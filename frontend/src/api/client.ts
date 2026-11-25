@@ -130,6 +130,21 @@ export function get<T>(path: string, query?: Record<string, unknown>,
   return request<T>('GET', path, { ...opts, query })
 }
 
+/** Registered local artifacts; preserve the same token/401 handling as JSON requests. */
+export async function getBlob(path: string, query?: Record<string, unknown>, timeout = DEFAULT_TIMEOUT): Promise<Blob> {
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), timeout)
+  const token = sessionToken()
+  try {
+    const response = await fetch(`/api${path}${buildQuery(query)}`, {
+      headers: token ? { 'X-Mdva-Token': token } : {}, cache: 'no-store', signal: controller.signal,
+    })
+    if (response.status === 401) window.dispatchEvent(new CustomEvent(TOKEN_INVALID_EVENT))
+    if (!response.ok) throw await parseError(response, 'GET')
+    return await response.blob()
+  } finally { clearTimeout(timer) }
+}
+
 export function post<T>(path: string, body?: Record<string, unknown>,
   opts: Omit<RequestOptions, 'query' | 'body'> = {}): Promise<T> {
   return request<T>('POST', path, { ...opts, body: body ?? {} })

@@ -1,0 +1,63 @@
+import { chromium } from '@playwright/test'
+import fs from 'node:fs'
+import { fileURLToPath } from 'node:url'
+import assert from 'node:assert/strict'
+const output=fileURLToPath(new URL('../out/acceptance',import.meta.url))
+fs.mkdirSync(output,{recursive:true})
+const browser=await chromium.launch({headless:true,executablePath:process.env.CHROMIUM_EXECUTABLE||'C:/Users/Administrator/AppData/Local/ms-playwright/chromium-1217/chrome-win64/chrome.exe'})
+const errors=[]
+const context=await browser.newContext({viewport:{width:1920,height:1080},recordVideo:{dir:output+'/space-3d-video',size:{width:1920,height:1080}}})
+const page=await context.newPage()
+page.on('pageerror',error=>errors.push(error.message))
+page.on('console',message=>{if(message.type()==='error')errors.push(message.text())})
+try {
+  await page.goto(process.env.MDVA_TEST_URL||'http://127.0.0.1:8765/monitor')
+  await page.locator('.solar-studio[data-render-state=ready]').waitFor({timeout:45000})
+  await page.getByRole('button',{name:'专业浏览',exact:true}).click()
+ await page.getByRole('button',{name:'进入三维全屏',exact:false}).click()
+  await page.waitForTimeout(1500)
+  assert.equal(await page.evaluate(()=>!!document.fullscreenElement),true)
+  await page.screenshot({path:output+'/space-3d-overview-20261111.png'})
+  await page.getByRole('button',{name:'地球近景',exact:true}).click()
+  await page.waitForTimeout(1300)
+  await page.screenshot({path:output+'/space-3d-earth-20261111.png'})
+  await page.getByRole('button',{name:'日地全景',exact:true}).click()
+  const events=(await (await page.request.get('http://127.0.0.1:8765/api/sw/summary')).json()).events
+  const valid=events.filter(e=>e.cmeAnalyses?.some(a=>a.speed>0&&typeof a.longitude==='number'&&typeof a.latitude==='number'&&a.halfAngle>0&&a.halfAngle<=90))
+  const chosen=valid.find(e=>e.cmeAnalyses.some(a=>a.isMostAccurate&&typeof a.longitude==='number'&&Math.abs(a.longitude)<=45))||valid[0]
+  assert.ok(chosen,'No real event with usable parameters available')
+  await page.getByRole('combobox',{name:'三维CME事件'}).selectOption(chosen.activityID)
+  await page.waitForTimeout(1200)
+  await page.screenshot({path:output+'/space-3d-cme-20261111.png'})
+  const slider=page.getByRole('slider',{name:'三维事件回放时间'})
+  const before=Number(await slider.inputValue())
+  await page.getByRole('button',{name:'推进时间轴',exact:true}).click()
+  await page.waitForTimeout(2500)
+  await page.getByRole('button',{name:'暂停时间轴',exact:true}).click()
+  assert.ok(Number(await slider.inputValue())>before)
+  const canvas=page.locator('.space-viewport canvas')
+  const box=await canvas.boundingBox()
+  await page.mouse.move(box.x+box.width*.55,box.y+box.height*.5)
+  await page.mouse.down();await page.mouse.move(box.x+box.width*.62,box.y+box.height*.6,{steps:15});await page.mouse.up()
+  await page.mouse.wheel(0,-200)
+  await page.waitForTimeout(600)
+  await page.getByRole('button',{name:'显示数据依据'}).click()
+  assert.ok(await page.getByText('数据与渲染依据',{exact:true}).isVisible())
+  await page.getByRole('button',{name:'退出全屏',exact:false}).click()
+  assert.equal(await page.evaluate(()=>!!document.fullscreenElement),false)
+  for(let i=0;i<3;i++) {
+    await page.getByRole('button',{name:'官方二维模型',exact:true}).click()
+    assert.equal(await page.locator('.space-viewport canvas').count(),0)
+    await page.locator('.model-image img').waitFor()
+    await page.getByRole('button',{name:'三维日地场景',exact:true}).click()
+    await page.locator('.solar-studio[data-render-state=ready]').waitFor()
+    assert.equal(await page.locator('.space-viewport canvas').count(),1)
+  }
+  await page.setViewportSize({width:390,height:844})
+  await page.waitForTimeout(700)
+  await page.screenshot({path:output+'/space-3d-mobile-20261111.png',fullPage:true})
+  assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false)
+  assert.deepEqual(errors,[])
+  fs.writeFileSync(output+'/space-3d-browser-20261111.json',JSON.stringify({webgl:true,fullscreen:true,camera_presets:true,real_event:chosen.activityID,event_playback:true,orbit_and_zoom:true,mode_switch_cycles:3,canvas_disposed_on_switch:true,mobile_overflow:false,errors},null,2))
+  console.log('3D browser checks passed')
+} finally {await context.close();await browser.close()}

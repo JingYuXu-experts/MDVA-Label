@@ -16,7 +16,7 @@ const cells = computed(() => {
   return [
     { icon: Cpu, key: 'CPU', val: `${p.cpu_count} 核`, sub: p.machine },
     { icon: HardDrive, key: '内存', val: `${p.ram_gb} GB`, sub: `空闲磁盘 ${p.free_disk_gb} GB` },
-    { icon: Layers, key: '显卡', val: p.has_gpu ? '检测到' : '无（本平台不接入需权重后端）', sub: `Python ${p.python}` },
+    { icon: Layers, key: '显卡', val: p.has_gpu ? '已检测到 NVIDIA' : '未检测到 NVIDIA', sub: `Python ${p.python}` },
   ]
 })
 </script>

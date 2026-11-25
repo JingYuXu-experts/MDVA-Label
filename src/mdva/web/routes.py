@@ -279,9 +279,9 @@ def _health(cx: Ctx):
     from .. import __version__
 
     return {"ok": True, "app": "mdva", "version": __version__, "root": str(cx.ws.root),
-            'revision': 'web-ssafd-1', 'sources': list(cx.hub.store.source_roots),
+            'revision': 'web-solar-ai-4', 'sources': list(cx.hub.store.source_roots),
             "workspaces": cx.ws.names(), "default": cx.ws.default_ws(),
-            "out_dir": str(cx.hub.out_dir), "offline": True}
+            "out_dir": str(cx.hub.out_dir), "offline": __import__("os").environ.get("MDVA_MONITOR_ONLINE") != "1", "monitor_revision": "sw-2"}
 
 
 @route("GET", "/workspaces", "列出扫描到的工作区与数据集")
@@ -407,6 +407,218 @@ def _import_execute(cx: Ctx):
 def _reference(cx: Ctx):
     from .solar import Solar
     return Solar(cx.hub).reference(cx.p.need('uri'))
+
+
+@route('GET', '/solar/catalog', '完整太阳数据产品登记状态')
+def _solar_catalog(cx: Ctx):
+    from .solar_catalog import SolarCatalog
+    return SolarCatalog(cx.hub).status()
+
+
+@route('POST', '/solar/index', '建立观测、参数与耀斑事件的只读索引')
+def _solar_index(cx: Ctx):
+    from .solar_catalog import SolarCatalog
+    return SolarCatalog(cx.hub).start_index()
+
+
+@route('GET', '/solar/days', '观测日期分页')
+def _solar_days(cx: Ctx):
+    from .solar_catalog import SolarCatalog
+    return SolarCatalog(cx.hub).days(cx.p.text('search'), cx.p.int_('page', 1))
+
+
+@route('GET', '/solar/day', '同日多源观测、参数和事件')
+def _solar_day(cx: Ctx):
+    from .solar_catalog import SolarCatalog
+    return SolarCatalog(cx.hub).day(cx.p.need('day'))
+
+
+@route('GET', '/solar/region', '原始活动区与物理参数和事件标签的可核验关联')
+def _solar_region(cx: Ctx):
+    from .solar_catalog import SolarCatalog
+    return SolarCatalog(cx.hub).region(cx.p.need('uri'), cx.p.int_('instance', 0))
+
+
+@route('GET', '/solar/image', '已登记太阳图像的原始 JPG 预览')
+def _solar_image(cx: Ctx):
+    from .solar_catalog import SolarCatalog
+    return Image(SolarCatalog(cx.hub).image(cx.p.need('uri')), content_type='image/jpeg')
+
+
+@route('GET', '/solar/baselines', '太阳模型论文和作者实现的核验状态，不冒充已复现模型')
+def _solar_baselines(cx: Ctx):
+    from .solar_catalog import BASELINES
+    return {'baselines': BASELINES, 'selection_policy': '论文与作者实现核对 → 原条件复现 → 本地数据适配评测 → 决定接入；当前没有已通过复现验收的深度模型。'}
+
+
+@route('GET','/solar/projects','太阳工作台项目列表')
+def _projects(cx):
+    from .solar_projects import projects
+    return {'projects':projects(cx.hub)}
+
+
+@route('POST','/solar/projects','创建托管图片项目')
+def _new_project(cx):
+    from .solar_projects import create
+    return create(cx.hub,cx.p.need('name'))
+
+
+@route('POST','/solar/projects/preferences','记录项目打开和收藏置顶')
+def _project_preferences(cx):
+    from .solar_projects import update_project
+    return update_project(cx.hub,cx.p.need('project'),cx.p.need('action'),cx.p.flag('pinned'))
+
+
+@route('GET','/solar/project','项目照片和批次')
+def _project(cx):
+    from .solar_projects import catalog
+    return catalog(cx.hub,cx.p.need('project'))
+
+
+@route('GET','/solar/project/sources','按文件名选择当前项目已有图片')
+def _project_sources(cx):
+    from .solar_projects import existing_images
+    return existing_images(cx.hub,cx.p.need('project'),cx.p.text('search'),cx.p.int_('page',1),
+                           refresh=cx.p.flag('refresh'),ids_only=cx.p.flag('ids_only'))
+
+
+@route('GET','/solar/project/source-thumbnail','预览当前项目尚未导入的照片')
+def _project_source_thumbnail(cx):
+    from .solar_projects import source_thumbnail
+    return Image(source_thumbnail(cx.hub,cx.p.need('project'),cx.p.need('id')),content_type='image/jpeg')
+
+
+@route('POST','/solar/project/import-sources','批量载入当前项目已有照片')
+def _project_import_sources(cx):
+    from .solar_projects import import_sources
+    return import_sources(cx.hub,cx.p.need('project'),cx.p.list_('ids'))
+
+
+@route('POST','/solar/project/import','导入一张图片并返回缩略图编号')
+def _project_import(cx):
+    from .solar_projects import import_photo
+    return import_photo(cx.hub,cx.p.need('project'),cx.p.inbound())
+
+
+@route('GET','/solar/project/image','项目照片和缩略图')
+def _project_image(cx):
+    from .solar_projects import photo_asset
+    raw,mime=photo_asset(cx.hub,cx.p.need('project'),cx.p.need('id'),cx.p.flag('thumb'))
+    return Image(raw,content_type=mime)
+
+
+@route('GET','/solar/project/estimate','按本机识别历史估算批次耗时')
+def _project_estimate(cx):
+    from .solar_projects import estimate
+    return estimate(cx.hub,{key:cx.p.int_(key) for key in ('AR','CH') if cx.p.int_(key)>0},cx.p.text('device','auto'))
+
+
+@route('POST','/solar/project/batch/precheck','核对目标、通道、照片输入与 UTC 观测范围')
+def _project_batch_precheck(cx):
+    from .solar_projects import precheck
+    return precheck(cx.hub,cx.p.need('project'),cx.p.list_('selection'),cx.p.need('goal'),cx.p.dict_('window'))
+
+
+@route('POST','/solar/project/batch','确认并登记项目批次')
+def _project_batch(cx):
+    from .solar_projects import submit
+    return submit(cx.hub,cx.p.need('project'),cx.p.need('id'),cx.p.list_('selection'),cx.p.text('device','auto'),
+                  target=cx.p.need('goal'),window=cx.p.dict_('window'))
+
+
+@route('GET','/solar/project/batch','按选图顺序读取逐张进度及预测')
+def _project_status(cx):
+    from .solar_projects import status
+    return status(cx.hub,cx.p.need('project'),cx.p.need('id'))
+
+
+@route('POST','/solar/project/forecast/retry','仅重新匹配观测和计算事件试算')
+def _project_forecast_retry(cx):
+    from .solar_projects import retry_forecast
+    return retry_forecast(cx.hub,cx.p.need('project'),cx.p.need('id'),cx.p.need('photo'))
+
+
+@route('GET','/solar/project/download','下载批次或单张机器结果')
+def _project_download(cx):
+    from .solar_projects import archive
+    return Image(archive(cx.hub,cx.p.need('project'),cx.p.need('id'),cx.p.text('photo')),content_type='application/zip')
+
+
+@route('GET','/solar/project/regions','从完整掩膜读取区域边界和像素面积')
+def _project_regions(cx):
+    import io
+    import numpy as np
+    from PIL import Image as PILImage
+    from .solar_products import regions
+    from .solar_models import asset
+    idx=cx.p.int_('index')
+    raw,_=asset(cx.hub,cx.hub.out_dir,cx.p.need('id'),f'image-{idx:06d}/candidate-mask.png')
+    with PILImage.open(io.BytesIO(raw)) as image:
+        return {'regions':regions(np.array(image))}
+
+
+@route('GET','/solar/models','本地AR/CH研究候选模型、输入条件及独立测试状态')
+def _solar_models(cx: Ctx):
+    from .solar_models import inventory,ensure_worker
+    ensure_worker(cx.hub.out_dir)
+    return inventory(cx.hub.out_dir)
+
+
+@route('GET','/solar/review/evidence','读取本地历史太阳结构多图复核案例')
+def _solar_review_evidence(cx: Ctx):
+    from .solar_review import evidence
+    return evidence(cx.hub.out_dir)
+
+
+@route('GET','/solar/review/asset','按固定资源编号读取本地复核对照图')
+def _solar_review_asset(cx: Ctx):
+    from .solar_review import asset
+    return Image(asset(cx.hub.out_dir,cx.p.need('id')))
+
+
+@route('POST','/solar/analyze','上传一张观测图直接自动识别，无需建数据集或人工标注')
+def _solar_analyze(cx: Ctx):
+    from .solar_input import analyze
+    return analyze(cx.hub,cx.hub.out_dir,cx.p.inbound())
+
+
+@route('GET','/solar/inference/input','仅读取已登记任务的原始输入图像')
+def _solar_input(cx: Ctx):
+    from .solar_input import original
+    raw,mime=original(cx.hub,cx.hub.out_dir,cx.p.need('id'),cx.p.int_('index',0))
+    return Image(raw,content_type=mime)
+
+
+@route('POST','/solar/inference','登记单图/批量候选任务；不写人工标注')
+def _solar_inference(cx: Ctx):
+    from .solar_models import create
+    return create(cx.hub,cx.hub.out_dir,cx.p.inbound())
+
+
+@route('GET','/solar/inference/jobs','当前工作区候选任务；断开浏览器不终止任务')
+def _solar_inference_jobs(cx: Ctx):
+    from .solar_models import jobs
+    return jobs(cx.hub,cx.hub.out_dir,cx.p.text('id'))
+
+
+@route('GET','/solar/inference/result','读取已完成逐图候选并核验原图身份')
+def _solar_inference_result(cx: Ctx):
+    from .solar_models import result
+    return result(cx.hub,cx.hub.out_dir,cx.p.need('id'),cx.p.int_('index',0))
+
+
+@route('GET','/solar/inference/assets','候选栅格或概率资源，只接受任务内资源ID')
+def _solar_inference_assets(cx: Ctx):
+    from .solar_models import asset
+    raw,mime=asset(cx.hub,cx.hub.out_dir,cx.p.need('id'),cx.p.need('asset'))
+    return Image(raw,content_type=mime)
+
+
+@route('GET','/solar/inference/annotations','直接下载未经人工审核的自动标注与区域测量')
+def _solar_inference_annotations(cx: Ctx):
+    from .solar_models import annotations_archive
+    return Image(annotations_archive(cx.hub,cx.hub.out_dir,cx.p.need('id')),
+        content_type='application/zip')
 
 
 @route('GET', '/reference/overlay', '保持原生几何的透明掩膜叠加图')
@@ -538,7 +750,7 @@ def _put_annotations(cx: Ctx):
     return cx.hub.put_annotations(cx.p.text("version") or cx.version_id(),
                                   cx.p.need("uri"), cx.p.anns(),
                                   role=cx.p.text("role"), state=cx.p.text("state", "draft"),
-                                  replace=cx.p.flag("replace", True))
+                                  replace=cx.p.flag("replace", True),preserve_approved=cx.p.flag("preserve_approved"))
 
 
 @route("POST", "/annotations/state", "单条状态迁移（角色 + 动作，越权 403）")
@@ -725,6 +937,11 @@ def _augment_suggest(cx: Ctx):
 def _augment_check(cx: Ctx):
     return cx.hub.augment_check(cx.p.list_("uris"), cx.p.dict_("recipe"),
                                category=cx.p.text("category"))
+
+
+@route("POST", "/augment/preview", "当前增强配方的实际样例预览，不写入文件或版本")
+def _augment_preview(cx: Ctx):
+    return cx.hub.augment_preview(cx.p.list_("uris"),cx.p.dict_("recipe"),cx.p.text("uri"))
 
 
 @route("POST", "/augment/run", "执行增强：新版本 + 谱系 + 落盘文件")
@@ -952,6 +1169,54 @@ def call(workspaces: Workspaces, method: str, path: str,
     if not clean.startswith(API_PREFIX + "/"):
         return Response.of({"error": f"未知路径 {path}"}, 404)
 
+    if clean.startswith('/api/training/'):
+        if method != 'GET':
+            return Response.of({'error': '实验跟踪接口仅支持读取'}, 405)
+        from .training import summary, detail, journal, files, artifact
+        try:
+            output = workspaces.out_dir or workspaces.root.parent/'out'
+            training_params = Params(query)
+            if clean.startswith('/api/training/diagnostics'):
+                from . import diagnostics
+                report_id = training_params.text('report')
+                if clean == '/api/training/diagnostics':
+                    return Response.of(diagnostics.summary(output, report_id))
+                if clean == '/api/training/diagnostics/cases':
+                    return Response.of(diagnostics.cases(output, report_id,
+                        category=training_params.text('category', 'FL'), run_id=training_params.text('run_id'),
+                        station=training_params.text('station'), error_type=training_params.text('error_type'),
+                        page=int(training_params.text('page', '1')), page_size=int(training_params.text('page_size', '24')),
+                        order=training_params.text('order', 'fixed'), subset=training_params.text('subset', 'validation'),
+                        sample_id=training_params.text('sample_id')))
+                if clean == '/api/training/diagnostics/assets':
+                    raw, mime = diagnostics.asset(output, report_id, training_params.text('id'))
+                    return Response(200, data=raw, content_type=mime, headers={'X-Content-Type-Options': 'nosniff'})
+                return Response.of({'error': '未知诊断接口'}, 404)
+            if clean == '/api/training/summary':
+                return Response.of(summary(workspaces.root, output=output))
+            if clean == '/api/training/run':
+                return Response.of(detail(workspaces.root, training_params.text('id'), output=output))
+            if clean == '/api/training/journal':
+                return Response.of(journal(workspaces.root, int(training_params.text('page', '1')),
+                    int(training_params.text('page_size', '12')), training_params.text('kind', 'all'), output=output))
+            if clean == '/api/training/files':
+                return Response.of(files(workspaces.root, output=output))
+            if clean == '/api/training/file':
+                if training_params.flag('download'):
+                    from urllib.parse import quote
+                    data, filename = artifact(workspaces.root, training_params.text('id'), output=output, download=True)
+                    return Response(200, data=data, content_type='text/plain; charset=utf-8', headers={
+                        'Content-Type': 'text/plain; charset=utf-8',
+                        'Content-Disposition': "attachment; filename*=UTF-8''"+quote(filename),
+                        'X-Content-Type-Options': 'nosniff'})
+                return Response.of(artifact(workspaces.root, training_params.text('id'), output=output))
+            return Response.of({'error': '未知实验接口'}, 404)
+        except (ValueError, FileNotFoundError) as exc:
+            return Response.of({'error': str(exc)}, 400 if isinstance(exc, ValueError) else 404)
+
+    if clean.startswith('/api/sw/'):
+        from .space_weather import dispatch
+        return dispatch(workspaces, method, clean[len('/api/sw/'):], {**(query or {}), **(body or {})})
     p = Params(query, body)
     try:
         hub = workspaces.hub(p.text("ws"))

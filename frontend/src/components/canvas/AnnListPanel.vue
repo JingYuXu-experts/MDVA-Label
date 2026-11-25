@@ -10,6 +10,7 @@ import NumberInput from '@/components/ui/NumberInput.vue'
 import SmartPanel from './SmartPanel.vue'
 import { useCanvasStore, type DraftAnn } from '@/stores/canvas'
 import { useCtxStore } from '@/stores/ctx'
+import { useItemsStore } from '@/stores/items'
 import { useToast } from '@/stores/toast'
 import * as api from '@/api/endpoints'
 
@@ -26,7 +27,7 @@ const STATE_TAG: Record<string, 'success' | 'warning' | 'accent' | 'danger' | 'n
 }
 
 const labelOpts = computed(() => {
-  const set = new Set<string>(store.draftAnns.map((a) => a.label).filter(Boolean))
+  const set = new Set<string>([...Object.keys(store.labelColors),...store.draftAnns.map((a) => a.label)].filter(Boolean))
   return [...set].map((l) => ({ value: l, label: l }))
 })
 
@@ -64,7 +65,7 @@ function switchTab(t: 'anns' | 'history'): void {
 async function approveOne(a: DraftAnn): Promise<void> { await store.reviewOne(a, 'approve') }
 async function rejectOne(a: DraftAnn): Promise<void> { await store.reviewOne(a, 'reject') }
 function openBulk(action: 'approve' | 'reject'): void {
-  if (!canReview.value) { toast.warning('需要 reviewer/admin 角色（后端 403 兜底）'); return }
+  if (!canReview.value) { toast.warning('需要审核员或管理员身份'); return }
   bulkAction.value = action
   reviewDialog.value = true
 }
@@ -72,10 +73,11 @@ const bulkAction = ref<'approve' | 'reject'>('approve')
 async function confirmBulk(): Promise<void> {
   await store.reviewBulk(bulkAction.value, bulkMaxConf.value < 1 ? bulkMaxConf.value : null)
   reviewDialog.value = false
+  await useItemsStore().fetchItems()
 }
 
 const KEYMAP: [string, string][] = [
-  ['1–6', '切模式'], ['Ctrl+S', '保存'], ['Ctrl+Z / Ctrl+Shift+Z', '撤销/重做'],
+  ['1–4', '选择、矩形、多边形、点'], ['Ctrl+S', '保存'], ['Ctrl+Z / Ctrl+Shift+Z', '撤销/重做'],
   ['← / →', '上/下一条'], ['+ / −', '缩放画布'], ['0', '适配窗口'],
   ['Delete', '删除选中'], ['Enter / 双击', '闭合多边形'], ['Esc', '取消绘制/退出选中'],
 ]
@@ -98,15 +100,15 @@ const KEYMAP: [string, string][] = [
         @click="pick(a)"
       >
         <span class="annrow__chip" :style="{ background: STATE_TAG[a.state] ? undefined : 'var(--text-muted)' }">{{ idx + 1 }}</span>
-        <span class="annrow__name mono">{{ a.geom }}#{{ a.localId }}</span>
-        <MTag :kind="STATE_TAG[a.state] || 'neutral'" :text="a.state" />
-        <span v-if="a.source !== 'manual'" class="annrow__src">{{ a.source === 'preannotate' || a.source === 'visual_prompt' || a.source === 'active_learning' ? '机' : a.source }}</span>
+        <span class="annrow__name mono">{{({box:'矩形',poly:'多边形',point:'点',interval:'时段',level:'水平带'} as Record<string,string>)[a.geom]||a.geom}} #{{ a.localId }}</span>
+        <MTag :kind="STATE_TAG[a.state] || 'neutral'" :text="({draft:'草稿',submitted:'待审核',approved:'已通过',rejected:'待修订'} as Record<string,string>)[a.state]||a.state" />
+        <span v-if="a.source !== 'manual'" class="annrow__src" :title="a.backend ? `模型来源：${a.backend}；模型分数未校准` : '机器或导入来源'">{{ a.source === 'preannotate' || a.source === 'visual_prompt' || a.source === 'active_learning' ? '机' : a.source }}</span>
         <span class="annrow__spacer" />
-        <MSelect :model-value="a.label" :options="labelOpts" width="90px" @click.stop
+        <MSelect :model-value="a.label" :options="labelOpts" width="90px" :disabled="a.state==='approved'" @click.stop
           @update:model-value="onLabelChange(a, String($event))" />
         <button v-if="canReview && a.id && a.state === 'submitted'" class="annrow__act" title="通过" @click.stop="approveOne(a)">✓</button>
-        <button v-if="canReview && a.id && a.state === 'submitted'" class="annrow__act" title="驳回" @click.stop="rejectOne(a)">✕</button>
-        <button class="annrow__del" title="删除（可撤销）" @click.stop="store.deleteAnn(a.localId)">
+        <button v-if="canReview && a.id && (a.state === 'submitted'||a.state==='approved')" class="annrow__act" :title="a.state==='approved'?'退回修订':'驳回'" @click.stop="rejectOne(a)">{{a.state==='approved'?'修订':'✕'}}</button>
+        <button class="annrow__del" :disabled="a.state==='approved'" title="删除（可撤销）" @click.stop="store.deleteAnn(a.localId)">
           <Trash2 :size="13" />
         </button>
       </div>
@@ -128,9 +130,9 @@ const KEYMAP: [string, string][] = [
     <!-- 审核区（角色决定可用性） -->
     <div class="review">
       <MButton size="sm" variant="secondary" :disabled="!canSubmit || !store.draftAnns.length"
-        :title="canSubmit ? '整条提交审核' : 'reviewer 不能提交，请切换角色/管理员'"
+        :title="canSubmit ? '整条提交审核' : '审核员不能提交新标注，请切换为标注员或管理员'"
         @click="store.submitItem()">提交审核</MButton>
-      <MButton size="sm" variant="primary" :disabled="!canReview" title="需要 reviewer/admin 角色（后端 403 兜底）"
+      <MButton size="sm" variant="primary" :disabled="!canReview" title="需要审核员或管理员身份"
         @click="openBulk('approve')">批量验收</MButton>
       <MButton size="sm" variant="danger" :disabled="!canReview" title="需要 reviewer/admin 角色"
         @click="openBulk('reject')">批量驳回</MButton>

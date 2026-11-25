@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
-import { RouterLink } from 'vue-router'
+import { RouterLink, useRoute } from 'vue-router'
 import { RefreshCw, ListTodo, Activity } from 'lucide-vue-next'
 import MSelect from '@/components/ui/MSelect.vue'
 import SegmentedControl from '@/components/ui/SegmentedControl.vue'
@@ -11,16 +11,22 @@ import { useToast } from '@/stores/toast'
 import type { Role } from '@/api/types'
 
 const ctx = useCtxStore()
+const route = useRoute()
+const libraryView = computed(() => route.name === 'training' || route.name === 'recognize' || (route.name === 'console' && route.query.browse !== 'items'))
 const tasks = useTasksStore()
 const toast = useToast()
 
 const NAV = [
+  { to: '/monitor', label: '监测大屏' },
+  { to: '/recognize', label: '自动识别' },
+  { to: '/solar', label: '太阳工作台' },
   { to: '/console', label: '管理台' },
   { to: '/annotate', label: '标注' },
   { to: '/clean', label: '清洗' },
   { to: '/augment', label: '增强' },
   { to: '/export', label: '导出' },
   { to: '/backends', label: '算法' },
+  { to: '/training', label: '模型实验' },
 ]
 
 const ROLE_OPTIONS: { value: Role; label: string }[] = [
@@ -79,13 +85,14 @@ async function onRescan() {
     <div class="topbar__ctx">
       <MSelect :model-value="ctx.ws" :options="wsOptions" width="110px"
         placeholder="工作区" @update:model-value="ctx.setWs" />
-      <MSelect :model-value="ctx.dataset" :options="datasetOptions" width="150px"
+      <span v-if="libraryView" class="topbar__library-label">{{ route.name === 'training' ? '本地模型训练' : '数据集总览' }}</span>
+      <MSelect v-if="!libraryView" :model-value="ctx.dataset" :options="datasetOptions" width="150px"
         placeholder="数据集" @update:model-value="ctx.setDataset" />
-      <MSelect :model-value="ctx.version" :options="versionOptions" width="170px"
+      <MSelect v-if="!libraryView" :model-value="ctx.version" :options="versionOptions" width="170px"
         placeholder="版本" @update:model-value="ctx.setVersion" />
     </div>
 
-    <SegmentedControl class="topbar__role" :model-value="ctx.role" :options="ROLE_OPTIONS"
+    <SegmentedControl v-if="!libraryView" class="topbar__role" :model-value="ctx.role" :options="ROLE_OPTIONS"
       aria-label="角色切换" @update:model-value="ctx.setRole" />
 
     <div class="topbar__tools">
@@ -146,6 +153,7 @@ async function onRescan() {
 .topbar__navitem:hover { background: var(--bg-hover); color: var(--text-primary); text-decoration: none; }
 .topbar__navitem.is-active { background: var(--accent-soft); color: var(--accent); }
 .topbar__ctx { display: flex; align-items: center; gap: var(--sp-2); flex: 1; min-width: 0; }
+.topbar__library-label { font-size:12px; color:var(--text-muted); }
 .topbar__role { flex: none; }
 .topbar__tools { display: flex; align-items: center; gap: var(--sp-1); flex: none; }
 .topbar__task {
@@ -180,4 +188,5 @@ async function onRescan() {
 .healthpop__line { margin: 0 0 var(--sp-1); font-size: var(--fs-xs); color: var(--text-secondary); word-break: break-all; }
 .healthpop__line.is-error { color: var(--danger); }
 @media (max-width: 1100px) { .topbar { height:auto; min-height:40px; flex-wrap:wrap; padding-top:6px; padding-bottom:6px; } .topbar__ctx { order:3; flex-basis:100%; } }
+@media (max-width: 700px) { .topbar__nav { min-width:0; max-width:100%; overflow-x:auto; } .topbar__navitem { flex-shrink:0; } }
 </style>

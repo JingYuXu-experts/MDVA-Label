@@ -1,0 +1,442 @@
+{
+  "schema": 1,
+  "revision": "20261115-R1",
+  "created_utc": "2026-11-15T04:32:06.833988+00:00",
+  "state": "awaiting_user_review",
+  "executable": false,
+  "training_restart": false,
+  "automatic_continuation": false,
+  "test_unlock": false,
+  "original_protocol_changed": false,
+  "plan": "docs/模型训练-诊断后修订计划与验收-20261115.md",
+  "diagnostic_report": "out/model-diagnostics/20261115-03",
+  "original_files_sha256": {
+    "out\\training-20261112-v2\\protocol.json": "d78503bc1cddc040d7f08e0f5d23617de658a6e18dc346829702befb8409f13b",
+    "out\\training-20261112-v2\\queue.json": "8563047bf69029c81862997edcc44cd54c1f8d96f40127e026234ac9d2127aca",
+    "out\\training-20261112-v2\\PAUSE": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "out\\training-20261112-v2\\runs\\AR-A0-s17\\status.json": "756fe070b6b846bfa9ede15a435aa791af51efd53ccf99ad9c8fdc1827c2d68b",
+    "out\\model-diagnostics\\20261115-03\\report.json": "86b70526e9daba625feae191016ca67a9c6a5915ccbfaea5ec9f7e8a1c982955",
+    "out\\model-diagnostics\\20261115-03\\next-experiment-proposal.json": "be2f564bbcf68568d3137ca369b06fd72a4a32aa92e616d4d94b3879a209438f"
+  },
+  "original_registered_runs": 42,
+  "completed_runs_retained": 29,
+  "new_AR_CH_runs_proposed": 9,
+  "interrupted_runs_to_audit": 1,
+  "deferred_original_runs": 3,
+  "proposed_execution_order": [
+    "AR-A0-s17",
+    "CH-C1-s17",
+    "AR-A1-s42",
+    "AR-A1-s2026",
+    "CH-C2-s42",
+    "CH-C2-s2026",
+    "AR-A0-s42",
+    "AR-A0-s2026",
+    "CH-C1-s42",
+    "CH-C1-s2026"
+  ],
+  "actions": [
+    {
+      "id": "FL-F0-s17",
+      "observed_state": "completed",
+      "proposed_action": "retain_no_retrain",
+      "stage": null,
+      "reason": "保留已完成结果，不重复训练",
+      "executable": false
+    },
+    {
+      "id": "FL-F0-s42",
+      "observed_state": "completed",
+      "proposed_action": "retain_no_retrain",
+      "stage": null,
+      "reason": "保留已完成结果，不重复训练",
+      "executable": false
+    },
+    {
+      "id": "FL-F0-s2026",
+      "observed_state": "completed",
+      "proposed_action": "retain_no_retrain",
+      "stage": null,
+      "reason": "保留已完成结果，不重复训练",
+      "executable": false
+    },
+    {
+      "id": "FL-F1-s17",
+      "observed_state": "completed",
+      "proposed_action": "retain_no_retrain",
+      "stage": null,
+      "reason": "保留已完成结果，不重复训练",
+      "executable": false
+    },
+    {
+      "id": "FL-F1-s42",
+      "observed_state": "completed",
+      "proposed_action": "retain_no_retrain",
+      "stage": null,
+      "reason": "保留已完成结果，不重复训练",
+      "executable": false
+    },
+    {
+      "id": "FL-F1-s2026",
+      "observed_state": "completed",
+      "proposed_action": "retain_no_retrain",
+      "stage": null,
+      "reason": "保留已完成结果，不重复训练",
+      "executable": false
+    },
+    {
+      "id": "FL-F2-s17",
+      "observed_state": "completed",
+      "proposed_action": "retain_no_retrain",
+      "stage": null,
+      "reason": "保留已完成结果，不重复训练",
+      "executable": false
+    },
+    {
+      "id": "FL-F2-s42",
+      "observed_state": "completed",
+      "proposed_action": "retain_no_retrain",
+      "stage": null,
+      "reason": "保留已完成结果，不重复训练",
+      "executable": false
+    },
+    {
+      "id": "FL-F2-s2026",
+      "observed_state": "completed",
+      "proposed_action": "retain_no_retrain",
+      "stage": null,
+      "reason": "保留已完成结果，不重复训练",
+      "executable": false
+    },
+    {
+      "id": "FL-F3-s17",
+      "observed_state": "completed",
+      "proposed_action": "retain_no_retrain",
+      "stage": null,
+      "reason": "保留已完成结果，不重复训练",
+      "executable": false
+    },
+    {
+      "id": "FL-F3-s42",
+      "observed_state": "completed",
+      "proposed_action": "retain_no_retrain",
+      "stage": null,
+      "reason": "保留已完成结果，不重复训练",
+      "executable": false
+    },
+    {
+      "id": "FL-F3-s2026",
+      "observed_state": "completed",
+      "proposed_action": "retain_no_retrain",
+      "stage": null,
+      "reason": "保留已完成结果，不重复训练",
+      "executable": false
+    },
+    {
+      "id": "FL-F4-s17",
+      "observed_state": "completed",
+      "proposed_action": "retain_no_retrain",
+      "stage": null,
+      "reason": "保留已完成结果，不重复训练",
+      "executable": false
+    },
+    {
+      "id": "FL-F4-s42",
+      "observed_state": "completed",
+      "proposed_action": "retain_no_retrain",
+      "stage": null,
+      "reason": "保留已完成结果，不重复训练",
+      "executable": false
+    },
+    {
+      "id": "FL-F4-s2026",
+      "observed_state": "completed",
+      "proposed_action": "retain_no_retrain",
+      "stage": null,
+      "reason": "保留已完成结果，不重复训练",
+      "executable": false
+    },
+    {
+      "id": "FL-F5-s17",
+      "observed_state": "completed",
+      "proposed_action": "retain_no_retrain",
+      "stage": null,
+      "reason": "保留已完成结果，不重复训练",
+      "executable": false
+    },
+    {
+      "id": "FL-F5-s42",
+      "observed_state": "completed",
+      "proposed_action": "retain_no_retrain",
+      "stage": null,
+      "reason": "保留已完成结果，不重复训练",
+      "executable": false
+    },
+    {
+      "id": "FL-F5-s2026",
+      "observed_state": "completed",
+      "proposed_action": "retain_no_retrain",
+      "stage": null,
+      "reason": "保留已完成结果，不重复训练",
+      "executable": false
+    },
+    {
+      "id": "FL-F6-s17",
+      "observed_state": "completed",
+      "proposed_action": "retain_no_retrain",
+      "stage": null,
+      "reason": "保留已完成结果，不重复训练",
+      "executable": false
+    },
+    {
+      "id": "FL-F6-s42",
+      "observed_state": "completed",
+      "proposed_action": "retain_no_retrain",
+      "stage": null,
+      "reason": "保留已完成结果，不重复训练",
+      "executable": false
+    },
+    {
+      "id": "FL-F6-s2026",
+      "observed_state": "completed",
+      "proposed_action": "retain_no_retrain",
+      "stage": null,
+      "reason": "保留已完成结果，不重复训练",
+      "executable": false
+    },
+    {
+      "id": "FL-F7-s17",
+      "observed_state": "completed",
+      "proposed_action": "retain_no_retrain",
+      "stage": null,
+      "reason": "保留已完成结果，不重复训练",
+      "executable": false
+    },
+    {
+      "id": "FL-F7-s42",
+      "observed_state": "completed",
+      "proposed_action": "retain_no_retrain",
+      "stage": null,
+      "reason": "保留已完成结果，不重复训练",
+      "executable": false
+    },
+    {
+      "id": "FL-F7-s2026",
+      "observed_state": "completed",
+      "proposed_action": "retain_no_retrain",
+      "stage": null,
+      "reason": "保留已完成结果，不重复训练",
+      "executable": false
+    },
+    {
+      "id": "FL-F8-s17",
+      "observed_state": "completed",
+      "proposed_action": "retain_no_retrain",
+      "stage": null,
+      "reason": "保留已完成结果，不重复训练",
+      "executable": false
+    },
+    {
+      "id": "FL-F8-s42",
+      "observed_state": "completed",
+      "proposed_action": "retain_no_retrain",
+      "stage": null,
+      "reason": "保留已完成结果，不重复训练",
+      "executable": false
+    },
+    {
+      "id": "FL-F8-s2026",
+      "observed_state": "completed",
+      "proposed_action": "retain_no_retrain",
+      "stage": null,
+      "reason": "保留已完成结果，不重复训练",
+      "executable": false
+    },
+    {
+      "id": "AR-A0-s17",
+      "observed_state": "failed",
+      "proposed_action": "audit_and_finish_or_resume_conditionally",
+      "stage": "M2",
+      "reason": "先修保存与恢复，核对patience和实验身份；不手改完成状态",
+      "executable": false
+    },
+    {
+      "id": "AR-A0-s42",
+      "observed_state": "not_started",
+      "proposed_action": "proposed_new_run",
+      "stage": "M4",
+      "reason": "基础配置补齐3种子形成公平比较",
+      "executable": false
+    },
+    {
+      "id": "AR-A0-s2026",
+      "observed_state": "not_started",
+      "proposed_action": "proposed_new_run",
+      "stage": "M4",
+      "reason": "基础配置补齐3种子形成公平比较",
+      "executable": false
+    },
+    {
+      "id": "AR-A1-s17",
+      "observed_state": "completed",
+      "proposed_action": "retain_no_retrain",
+      "stage": null,
+      "reason": "保留已完成结果，不重复训练",
+      "executable": false
+    },
+    {
+      "id": "AR-A1-s42",
+      "observed_state": "not_started",
+      "proposed_action": "proposed_new_run",
+      "stage": "M3",
+      "reason": "主配置补齐3种子，先核验稳定性",
+      "executable": false
+    },
+    {
+      "id": "AR-A1-s2026",
+      "observed_state": "not_started",
+      "proposed_action": "proposed_new_run",
+      "stage": "M3",
+      "reason": "主配置补齐3种子，先核验稳定性",
+      "executable": false
+    },
+    {
+      "id": "CH-C0-s17",
+      "observed_state": "not_started",
+      "proposed_action": "defer",
+      "stage": null,
+      "reason": "512部署资源或分辨率研究确有需要时再单独评审",
+      "executable": false
+    },
+    {
+      "id": "CH-C0-s42",
+      "observed_state": "not_started",
+      "proposed_action": "defer",
+      "stage": null,
+      "reason": "512部署资源或分辨率研究确有需要时再单独评审",
+      "executable": false
+    },
+    {
+      "id": "CH-C0-s2026",
+      "observed_state": "not_started",
+      "proposed_action": "defer",
+      "stage": null,
+      "reason": "512部署资源或分辨率研究确有需要时再单独评审",
+      "executable": false
+    },
+    {
+      "id": "CH-C1-s17",
+      "observed_state": "not_started",
+      "proposed_action": "proposed_new_run",
+      "stage": "M2",
+      "reason": "同分辨率、同数值精度下补首个基础对照",
+      "executable": false
+    },
+    {
+      "id": "CH-C1-s42",
+      "observed_state": "not_started",
+      "proposed_action": "proposed_new_run",
+      "stage": "M4",
+      "reason": "基础配置补齐3种子形成公平比较",
+      "executable": false
+    },
+    {
+      "id": "CH-C1-s2026",
+      "observed_state": "not_started",
+      "proposed_action": "proposed_new_run",
+      "stage": "M4",
+      "reason": "基础配置补齐3种子形成公平比较",
+      "executable": false
+    },
+    {
+      "id": "CH-C2-s17",
+      "observed_state": "completed",
+      "proposed_action": "retain_no_retrain",
+      "stage": null,
+      "reason": "保留已完成结果，不重复训练",
+      "executable": false
+    },
+    {
+      "id": "CH-C2-s42",
+      "observed_state": "not_started",
+      "proposed_action": "proposed_new_run",
+      "stage": "M3",
+      "reason": "主配置补齐3种子，先核验稳定性",
+      "executable": false
+    },
+    {
+      "id": "CH-C2-s2026",
+      "observed_state": "not_started",
+      "proposed_action": "proposed_new_run",
+      "stage": "M3",
+      "reason": "主配置补齐3种子，先核验稳定性",
+      "executable": false
+    }
+  ],
+  "FL": {
+    "completed_runs_retained": 27,
+    "working_baseline": "FL-F0",
+    "expand_old_matrix": false,
+    "debug_overfit_images": 16,
+    "debug_max_optimizer_steps": 300,
+    "candidate_ids": [
+      "FL-R1",
+      "FL-R2"
+    ],
+    "candidate_hypotheses": [
+      "日面内稳健灰度归一化；先验证照明/背景差异及日面边界",
+      "全图与局部块混合训练；先验证细目标漏检证据"
+    ],
+    "initial_seed": 17,
+    "maximum_initial_runs": 2,
+    "maximum_repeat_runs": 2,
+    "maximum_new_formal_runs": 4,
+    "chosen_candidates": [],
+    "approval_status": "conditional_not_approved",
+    "pilot_gate": {
+      "dice_gain_percentage_points_minimum": 3,
+      "major_station_drop_percentage_points_maximum": 3,
+      "comparison": "same seed 17 vs FL-F0-s17"
+    },
+    "resource_alternative_gate": {
+      "dice_gap_percentage_points_maximum": 1,
+      "P95_speedup_fraction_minimum": 0.25,
+      "or_memory_reduction_fraction_minimum": 0.3
+    },
+    "repeats": [
+      42,
+      2026
+    ],
+    "max_candidates_repeated": 1
+  },
+  "forecast": {
+    "action": "defer_new_training",
+    "research_configurations_retained": 31,
+    "official_supervision_released": false
+  },
+  "stage_gates": {
+    "M0": "用户验收修订范围及复核清单",
+    "M1": "保存/恢复/互斥/早停故障验证通过，合法实验身份",
+    "M2": "AR收尾审计、CH首个公平对照及FL学习检查",
+    "M3": "主配置重复种子完整、资源合格",
+    "M4": "基线重复种子完整；FL按门槛停止或继续",
+    "M5": "选择封存及独立测试另行确认；人工效用分别验收",
+    "M6": "过门槛模型接入，论文可复核"
+  },
+  "budget": {
+    "AR_CH_and_delivery_gpu_hours": [
+      12,
+      40
+    ],
+    "optional_FL_gpu_hours": [
+      3,
+      12
+    ],
+    "effective_development_days": [
+      5,
+      10
+    ]
+  },
+  "next_safe_command": "python -m mdva.training status",
+  "next_action": "用户验收本计划；随后先做M1，禁止直接unpause或continue"
+}

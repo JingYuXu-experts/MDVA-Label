@@ -1,66 +1,18 @@
 <script setup lang="ts">
-/** 左栏：清洗算子面板（元数据驱动，勾选 + 参数）。§5.3 布局 280px。 */
 import { computed } from 'vue'
-import MEmpty from '@/components/ui/MEmpty.vue'
-import MSkeleton from '@/components/ui/MSkeleton.vue'
-import MInput from '@/components/ui/MInput.vue'
 import OpItem from './OpItem.vue'
 import { useCleanStore } from '@/stores/clean'
-
-const store = useCleanStore()
-
-const chainText = computed(() => store.selectedOps.map(o => o.name).join(' → ') || '未选')
+const store=useCleanStore()
+const advanced=computed(()=>store.ops.filter(o=>['crop','rotate','mirror'].includes(o.name)))
+const choices=[{name:'dedup',title:'重复图片检查',text:'找出画面高度相似的图片。太阳相邻时刻可能相似，请先查看候选结果。'},{name:'blur',title:'模糊图片检查',text:'按清晰度阈值筛出候选图片。不同通道的纹理不同，需要人工核对。'}]
+function toggle(name:string){store.toggleOp(name,!store.state[name]?.on)}
 </script>
-
-<template>
-  <aside class="oppanel" aria-label="清洗算子面板">
-    <header class="oppanel__head">
-      <h2 class="oppanel__title">清洗算子</h2>
-      <p class="oppanel__hint">勾选后按列表顺序串联执行；参数改动即自动重新预览。</p>
-    </header>
-
-    <MSkeleton v-if="store.opsLoading" :show="true" variant="rows" :count="5" />
-    <MEmpty v-else-if="store.opsError" :text="`算子表读不出来：${store.opsError}`" />
-    <MEmpty v-else-if="!store.ops.length" text="后端未登记任何清洗算子" />
-
-    <div v-else class="oppanel__list" role="group" aria-label="算子清单">
-      <OpItem
-        v-for="meta in store.ops"
-        :key="meta.name"
-        :meta="meta"
-        :state="store.state[meta.name]"
-        @toggle="store.toggleOp(meta.name, $event)"
-        @param="(key, value) => store.setParam(meta.name, key, value)"
-      />
-    </div>
-
-    <footer class="oppanel__foot">
-      <MInput
-        :model-value="store.calibration"
-        label="标定文件（可选）"
-        placeholder="留空则不注入标定"
-        aria-label="标定文件相对路径"
-        @update:model-value="store.calibration = String($event); store.schedulePreview()"
-      />
-      <p class="oppanel__chain">
-        <span class="oppanel__chainlabel">算子链</span>
-        <code class="num">{{ chainText }}</code>
-      </p>
-    </footer>
-  </aside>
-</template>
-
+<template><aside class="oppanel"><header><span class="step">02</span><div><h2>想检查哪些问题？</h2><p>选择检查项，再点右侧「检查这批图片」。</p></div></header>
+<p v-if="store.opsError" role="alert">{{store.opsError}} <button @click="store.loadOps">重试</button></p>
+<fieldset :disabled="store.applying||store.opsLoading"><div v-for="choice in choices" :key="choice.name" class="check-card" :class="{chosen:store.state[choice.name]?.on}"><button class="choice" :aria-pressed="!!store.state[choice.name]?.on" @click="toggle(choice.name)"><span>{{store.state[choice.name]?.on?'✓':'+'}}</span><b>{{choice.title}}</b></button><p>{{choice.text}}</p>
+<details v-if="store.state[choice.name]?.on"><summary>调整检查标准</summary><template v-if="choice.name==='dedup'"><label>相似容差 <input type="number" min="0" max="64" :value="store.state.dedup.params.distance" @input="store.setParam('dedup','distance',Number(($event.target as HTMLInputElement).value))"/></label><small>0 最严格；越大越容易将不同图片归为同组。</small><label>保留哪一张<select :value="store.state.dedup.params.keep" @change="store.setParam('dedup','keep',($event.target as HTMLSelectElement).value)"><option value="first">保留第一张</option><option value="last">保留最后一张</option><option value="sharpest">保留最清晰的一张</option></select></label></template><template v-else><label>清晰度下限<input type="number" min="0" step="5" :value="store.state.blur.params.threshold" @input="store.setParam('blur','threshold',Number(($event.target as HTMLInputElement).value))"/></label><small>低于此值列为候选。数值越高，候选通常越多。</small></template></details></div>
+<details class="advanced"><summary>图像方向与裁切（高级）</summary><p>改变方向或裁切会影响坐标。启用后会写出派生图片，并同步变换人工标注；原始掩膜不作为变换后的真值导出。</p><OpItem v-for="op in advanced" :key="op.name" :meta="op" :state="store.state[op.name]" @toggle="store.toggleOp(op.name,$event);store.writeTransformed=true" @param="(key,value)=>store.setParam(op.name,key,value)"/></details></fieldset>
+<p class="footnote">检查不会改动原件。只有确认后，才将保留的图片整理为一个新版本。</p></aside></template>
 <style scoped>
-.oppanel {
-  width: 280px; flex: 0 0 280px; display: flex; flex-direction: column;
-  background: var(--bg-panel); border-right: 1px solid var(--border); overflow: hidden;
-}
-.oppanel__head { padding: var(--sp-3); border-bottom: 1px solid var(--border); }
-.oppanel__title { margin: 0; font-size: var(--fs-md); font-weight: 600; color: var(--text-primary); }
-.oppanel__hint { margin: 4px 0 0; font-size: var(--fs-xs); color: var(--text-muted); line-height: 1.45; }
-.oppanel__list { flex: 1; min-height: 0; overflow-y: auto; }
-.oppanel__foot { padding: var(--sp-3); border-top: 1px solid var(--border); display: flex; flex-direction: column; gap: var(--sp-2); }
-.oppanel__chain { margin: 0; display: flex; align-items: baseline; gap: var(--sp-2); font-size: var(--fs-xs); }
-.oppanel__chainlabel { color: var(--text-muted); }
-.oppanel__chain code { color: var(--text-secondary); word-break: break-all; }
+.oppanel{width:300px;flex:none;padding:18px;background:var(--bg-panel);border-right:1px solid var(--border);overflow:auto;box-sizing:border-box}.oppanel header{display:flex;gap:10px;align-items:flex-start;margin-bottom:16px}.step{border-radius:7px;padding:8px;background:var(--bg-raised);color:var(--accent);font:14px Consolas,monospace}.oppanel h2{margin:0;font-size:15px}.oppanel p,.oppanel small{font-size:11px;line-height:1.8;color:var(--text-secondary)}fieldset{padding:0;margin:0;border:0;min-width:0}.check-card{border:1px solid var(--border);padding:12px;border-radius:7px;margin-bottom:12px}.check-card.chosen{border-color:var(--accent);background:var(--bg-raised)}.choice{display:flex;gap:9px;align-items:center;border:0;background:none;color:var(--text-primary);font-size:13px;cursor:pointer;width:100%;padding:0}.choice span{font-size:18px;color:var(--accent)}.oppanel details summary{font-size:11px;cursor:pointer;color:var(--text-muted)}.oppanel label{display:flex;gap:7px;align-items:center;justify-content:space-between;font-size:11px;margin:12px 0}.oppanel input,.oppanel select{background:var(--bg-base);border:1px solid var(--border);color:var(--text-primary);font-size:11px;padding:5px;max-width:130px}.oppanel input{width:65px}.advanced{border-top:1px solid var(--border);padding-top:15px}.footnote{padding:10px;border:1px dashed var(--border);border-radius:5px}
 </style>

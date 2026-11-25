@@ -4,6 +4,7 @@
  * 作用范围 = 当前数据集+版本的条目全集（与 /api/items 同源，不另设筛选）。
  */
 import { ref, computed, onBeforeUnmount, onMounted, watch } from 'vue'
+import WorkflowSteps from '@/components/layout/WorkflowSteps.vue'
 import ScopePicker from '@/components/layout/ScopePicker.vue'
 import OpPanel from '@/components/clean/OpPanel.vue'
 import PreviewPane from '@/components/clean/PreviewPane.vue'
@@ -24,6 +25,7 @@ const currentVersion = computed(() => ctx.versions.find(v => v.id === ctx.versio
 const isCleanVersion = computed(() => String(currentVersion.value?.op || '').startsWith('clean'))
 
 onMounted(async () => {
+  store.autoPreview=false
   store.datasetId = ctx.dataset
   await Promise.all([store.loadOps(), store.loadHistory()])
 })
@@ -31,6 +33,8 @@ onMounted(async () => {
 onBeforeUnmount(() => store.cancelScheduled())
 
 async function syncScope() {
+  if(store.datasetId!==ctx.dataset)store.reset()
+  store.setScope([])
   store.datasetId = ctx.dataset
   if (!ctx.dataset || !ctx.version) { store.setScope([]); return }
   await items.fetchItems()
@@ -41,7 +45,7 @@ watch(() => [ctx.dataset, ctx.version], () => { void syncScope() }, { immediate:
 </script>
 
 <template>
-  <div class="clean-wrapper"><ScopePicker @change="onScope" />
+  <div class="clean-wrapper"><WorkflowSteps /><ScopePicker :disabled="store.applying" @change="onScope" />
   <div class="clean" :data-scope="scopeUris.length">
     <OpPanel />
     <PreviewPane v-if="scopeUris.length" />
@@ -58,4 +62,5 @@ watch(() => [ctx.dataset, ctx.version], () => { void syncScope() }, { immediate:
 .clean-wrapper {flex:1;min-height:0;display:flex;flex-direction:column;}
 .clean { flex: 1; min-height: 0; display: flex; align-items: stretch; background: var(--bg-base); }
 .clean__noscope { flex: 1; border-right: 1px solid var(--border); }
+@media(max-width:1100px){.clean{flex-wrap:wrap;overflow:auto}.clean :deep(.exec){width:100%;border-left:0;border-top:1px solid var(--border)}.clean :deep(.preview){min-width:300px}}@media(max-width:650px){.clean{display:block}.clean :deep(.oppanel){width:100%;border-right:0}.clean :deep(.preview){padding:15px}.clean-wrapper{overflow:auto}}
 </style>
